@@ -1,0 +1,36 @@
+# Environment
+.env
+backend/.env
+
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build
+frontend/dist/
+
+# Uploads (archivos subidos por usuarios)
+backend/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Backups and Compressed Archives
+*.zip
+*.rar
+*.tar.gz
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS/System Files
+.DS_Store
+Thumbs.db
