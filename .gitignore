@@ -34,3 +34,6 @@ npm-debug.log*
 # OS/System Files
 .DS_Store
 Thumbs.db
+
+# Local files
+tecnologias.json
