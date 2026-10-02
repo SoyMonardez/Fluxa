@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-echo "Iniciando DB..."
+echo "Preparando base de datos..."
 node scripts/initDB.js
 
-echo "Arrancando servidor..."
+echo "Arrancando API..."
 exec node server.js

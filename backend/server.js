@@ -1,41 +1,50 @@
+require('dotenv').config({ quiet: true });
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
-require('dotenv').config();
+const z = require('zod');
+const { HttpError } = require('./lib/http');
+const auth = require('./auth');
 
-const authRoutes = require('./routes/auth');
-const proyectosRoutes = require('./routes/proyectos');
-const trabajadoresRoutes = require('./routes/trabajadores');
-const asignacionesRoutes = require('./routes/asignaciones');
-const asistenciasRoutes = require('./routes/asistencias');
-const ingresosRoutes = require('./routes/ingresos');
-const proveedoresRoutes = require('./routes/proveedores');
-const comprobantesRoutes = require('./routes/comprobantes');
-const dashboardRoutes = require('./routes/dashboard');
-const verifyToken = require('./middleware/auth');
+z.config(z.locales.es()); // mensajes de validación en castellano
+
+if (!process.env.JWT_SECRET) {
+  console.error('Falta JWT_SECRET en el entorno (.env). Sin eso no se pueden firmar las sesiones.');
+  process.exit(1);
+}
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+app.set('trust proxy', 1); // detrás de nginx
+app.use(express.json({ limit: '256kb' }));
 
-// Serve uploaded files statically
-app.use('/uploads', verifyToken, express.static(path.join(__dirname, 'uploads')));
+app.get('/api/salud', (req, res) => res.json({ ok: true }));
+app.use('/api/auth', auth.router);
 
-// Public
-app.use('/api/auth', authRoutes);
+app.use('/api', auth.requireAuth);
+app.use('/api/estado', require('./routes/estado'));
+app.use('/api/obreros', require('./routes/obreros'));
+app.use('/api/cuadrillas', require('./routes/cuadrillas'));
+app.use('/api/asistencia', require('./routes/asistencia'));
+app.use('/api/adelantos', require('./routes/adelantos'));
+app.use('/api/pagos', require('./routes/pagos'));
+app.use('/api/herramientas', require('./routes/herramientas'));
 
-// Protected
-app.use('/api/proyectos', verifyToken, proyectosRoutes);
-app.use('/api/trabajadores', verifyToken, trabajadoresRoutes);
-app.use('/api/asignaciones', verifyToken, asignacionesRoutes);
-app.use('/api/asistencias', verifyToken, asistenciasRoutes);
-app.use('/api/ingresos', verifyToken, ingresosRoutes);
-app.use('/api/proveedores', verifyToken, proveedoresRoutes);
-app.use('/api/comprobantes', verifyToken, comprobantesRoutes);
-app.use('/api/dashboard', verifyToken, dashboardRoutes);
+app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta inexistente.' }));
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err instanceof z.ZodError) {
+    const primero = err.issues[0];
+    return res.status(400).json({ error: primero?.message || 'Datos inválidos.', detalle: err.issues });
+  }
+  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON inválido.' });
+  if (err.code === 'ER_NO_REFERENCED_ROW_2') return res.status(400).json({ error: 'Hace referencia a algo que no existe.' });
+  console.error(err);
+  return res.status(500).json({ error: 'Error interno del servidor.' });
+});
 
 app.listen(PORT, () => {
-  console.log(`ETEM Backend corriendo en http://localhost:${PORT}`);
+  console.log(`Fluxa / ETEM API en http://localhost:${PORT}`);
 });

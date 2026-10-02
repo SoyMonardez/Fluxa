@@ -1,118 +1,110 @@
-# Fluxa / ETEM - Sistema de Gestión Integrado
+# Fluxa / ETEM — Obras desde el celular
 
-Un sistema de gestión moderno y robusto diseñado para la administración de trabajadores, control de asistencias, gestión de proyectos, registro de ingresos, procesamiento de comprobantes/gastos y visualización de métricas clave a través de un panel de control interactivo.
+App para reemplazar el cuaderno de obra: **asistencia** con un tilde, **pagos del viernes**
+con descuento de **adelantos**, **cuadrillas** con su **encargado** y el **reparto de
+herramientas** con sus reclamos. Pensada primero para el celular (se instala como app).
 
-El proyecto está estructurado como un monorepositorio que separa claramente el **Frontend** y el **Backend**, facilitando su despliegue y desarrollo local o en contenedores.
+El diseño completo (patrones de uso, flujos, reglas de pago y modelo de datos) está en
+**[docs/DISENO.md](docs/DISENO.md)**.
 
----
-
-## 🚀 Arquitectura y Tecnologías
-
-### Frontend (`/frontend`)
-*   **Core**: React 19 + Vite 8
-*   **Estilos**: Tailwind CSS v4
-*   **Enrutado**: React Router Dom v7
-*   **Visualización de datos**: Recharts
-*   **Iconos**: Lucide React
-*   **Notificaciones**: React Hot Toast
-*   **Cliente HTTP**: Axios
-
-### Backend (`/backend`)
-*   **Core**: Node.js + Express 5
-*   **Base de Datos**: MySQL 8 (usando `mysql2`)
-*   **Autenticación**: JWT (JSON Web Tokens) & Encriptación con Bcrypt
-*   **Validación**: Zod
-*   **Subida de archivos**: Multer (para comprobantes y documentos)
+![Asistencia, jornada y adelantos](docs/capturas/1-asistencia-y-adelantos.png)
+![Semana y día de pago](docs/capturas/2-semana-y-pagos.png)
+![Cuadrillas, encargados y herramientas](docs/capturas/3-cuadrillas-y-herramientas.png)
 
 ---
 
-## 🛠️ Requisitos Previos
+## Qué hace
 
-Antes de comenzar, asegúrate de tener instalado:
-*   [Node.js](https://nodejs.org/) (v18 o superior recomendado)
-*   [Docker](https://www.docker.com/) y **Docker Compose** (opcional, para despliegue simplificado)
-*   [MySQL Server](https://dev.mysql.com/downloads/mysql/) (si corres la base de datos de manera local)
+| Sección | Para qué |
+|---|---|
+| **Asistencia** | Lista general del día (no por obra), agrupada por cuadrilla. Un toque = presente; mantener apretado = ½, 1½ (medio día más) o doble. "Todos" por cuadrilla. En cada fila: adelantos y **cuánto le queda** cobrar. Vista semanal. Funciona sin señal. |
+| **Pagos** | Semana de **sábado a viernes**, se paga el viernes. Total a pagar, días de cada uno, descontar adelantos **todo / una parte / después**, plus, excluir a alguien. Confirmar, compartir por WhatsApp, recibos, historial y anular. |
+| **Cuadrillas** | Cada obra con sus integrantes y un **encargado** que responde por las herramientas. Entregar del pañol, devolver, mover entre obras, reclamos e historial. |
+| **Herramientas** | Inventario de herramientas y máquinas, dónde está cada unidad y quién responde. Reclamo por **robo, faltante o rotura** con opción de **cobrárselo** al responsable. |
+| **Obreros** | Nombre, rol (capataz, oficial, medio oficial, ayudante), **jornal por día**, cuadrilla y teléfono. Ficha con su cuenta, adelantos y pagos. |
 
----
+## Tecnología
 
-## 🐳 Despliegue con Docker Compose (Recomendado)
+- **Frontend** (`/frontend`): React 19, Vite, Tailwind CSS 4, Motion (animaciones), Lucide (íconos). PWA instalable.
+- **Backend** (`/backend`): Node.js + Express 5, MySQL 8 (`mysql2`), JWT + bcrypt, Zod.
 
-La forma más rápida de inicializar todo el ecosistema (Base de datos MySQL, Servidor Express y Frontend en Nginx) es usando Docker Compose:
-
-1.  Copia el archivo `.env.example` de la raíz a un nuevo archivo `.env` en la misma ubicación:
-    ```bash
-    cp .env.example .env
-    ```
-2.  Configura las variables de entorno en el nuevo `.env`:
-    *   `DB_PASSWORD`: Contraseña segura para el administrador de la base de datos.
-    *   `DB_NAME`: Nombre de la base de datos (por defecto `etem_management`).
-    *   `JWT_SECRET`: Clave secreta para firmar los tokens de sesión.
-    *   `ADMIN_PASSWORD`: Contraseña inicial para el panel de administración.
-3.  Levanta los contenedores:
-    ```bash
-    docker-compose up --build -d
-    ```
-4.  El frontend estará disponible en [http://localhost](http://localhost) (Puerto 80).
-5.  El backend correrá internamente en el puerto `3001` y se comunicará de forma segura.
-
----
-
-## 💻 Configuración Local para Desarrollo (Sin Docker)
-
-Si prefieres ejecutar el frontend y el backend de forma independiente en tu entorno local:
-
-### 1. Configuración del Backend
-1.  Navega al directorio del backend:
-    ```bash
-    cd backend
-    ```
-2.  Instala las dependencias:
-    ```bash
-    npm install
-    ```
-3.  Crea un archivo `.env` dentro de `backend/` basado en la configuración de la base de datos de tu servidor MySQL local (por ejemplo, XAMPP o MySQL estándar):
-    ```env
-    PORT=3003
-    DB_HOST=localhost
-    DB_USER=root
-    DB_PASSWORD=tu_contraseña
-    DB_NAME=etem_management
-    JWT_SECRET=tu_jwt_secreto
-    ```
-4.  Inicia el servidor en modo desarrollo/producción:
-    ```bash
-    node server.js
-    ```
-
-### 2. Configuración del Frontend
-1.  Navega al directorio del frontend:
-    ```bash
-    cd ../frontend
-    ```
-2.  Instala las dependencias:
-    ```bash
-    npm install
-    ```
-3.  Inicia el servidor de desarrollo de Vite:
-    ```bash
-    npm run dev
-    ```
-4.  El frontend estará disponible en [http://localhost:5173](http://localhost:5173).
+```
+backend/
+  server.js            rutas y manejo de errores
+  auth.js              login, sesión (30 días) y cambio de contraseña
+  db.js                conexión y transacciones
+  lib/                 fechas, cálculos de pago (con tests), cuentas
+  routes/              estado, obreros, cuadrillas, asistencia, adelantos, pagos, herramientas
+  scripts/initDB.js    crea/actualiza la base (se corre en cada arranque)
+  scripts/seed.js      datos de ejemplo (sólo para probar)
+frontend/src/
+  lib/                 api, estado global, cola sin señal, fechas y formatos
+  ui/                  piezas: hojas deslizables, tilde, avisos, campos
+  shell/               login, barra de secciones, menú
+  secciones/           asistencia, pagos, cuadrillas, herramientas, obreros
+```
 
 ---
 
-## 🔒 Seguridad y Buenas Prácticas de Git
+## Levantarlo con Docker (recomendado)
 
-Para proteger el entorno y la privacidad de tus datos, se han implementado las siguientes exclusiones automáticas en el control de versiones (`.gitignore`):
-*   Archivos de configuración del entorno (`.env`, `backend/.env`)
-*   Directorios de dependencias (`node_modules/`)
-*   Compilaciones de producción (`dist/`)
-*   Copias de seguridad comprimidas (`*.zip`)
-*   Archivos temporales del sistema (`.DS_Store`, `Thumbs.db`)
-*   Directorios del editor de código (`.vscode/`, `.idea/`)
+1. `cp .env.example .env` y completá `DB_PASSWORD`, `JWT_SECRET` y `ADMIN_PASSWORD`.
+2. `docker compose up --build -d`
+3. Abrí `http://<ip-del-servidor>` y entrá con **admin** y la contraseña de `ADMIN_PASSWORD`.
+4. En el celular: menú del navegador → **Instalar app** / **Agregar a inicio**.
+
+## Desarrollo local (sin Docker)
+
+Necesitás Node.js 20.19+ (o 22) y MySQL 8 o MariaDB (por ejemplo, la de XAMPP).
+
+```bash
+# Backend
+cd backend
+npm install
+cat > .env <<'EOF'
+PORT=3001
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=etem_management
+JWT_SECRET=algo-largo-y-random
+ADMIN_PASSWORD=una-clave
+EOF
+npm run db:init        # crea la base y el usuario admin
+npm run db:seed        # (opcional) carga datos de ejemplo si la base está vacía
+npm run dev
+
+# Frontend (otra terminal)
+cd frontend
+npm install
+npm run dev            # http://localhost:5173 (le pasa /api al backend en :3001)
+```
+
+Si el backend corre en otro puerto: `VITE_API_PROXY=http://localhost:3003 npm run dev`.
+
+## Pruebas
+
+```bash
+cd backend && npm test      # reglas de pago, adelantos y semanas de pago
+cd frontend && npm run lint && npm run build
+```
 
 ---
 
-## 📄 Licencia
+## Si venías usando la versión anterior
 
-Este proyecto está bajo la Licencia ISC. Consúltese el archivo de licencia correspondiente para más detalles.
+Al arrancar, `initDB` **no borra nada**: renombra las tablas viejas que ya no se usan
+(`proyectos`, `trabajadores`, `asignaciones`, `asistencias` por obra, `ingresos_obra`,
+`gastos_proveedor`, `comprobantes`) a `legacy_*`, y copia los trabajadores a la tabla nueva
+`obreros` con su último jornal. La asistencia vieja no se copia (aparecería como deuda).
+
+Cuando ya no las necesites, las podés borrar:
+
+```sql
+DROP TABLE legacy_comprobantes, legacy_ingresos_obra, legacy_gastos_proveedor,
+           legacy_asistencias, legacy_asignaciones, legacy_proyectos, legacy_trabajadores;
+```
+
+## Licencia
+
+ISC.

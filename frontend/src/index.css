@@ -1,65 +1,241 @@
 @import "tailwindcss";
 
-*, *::before, *::after { box-sizing: border-box; }
-
-html {
-  background-color: #f8fafc;
-  height: 100%;
+/* ── Tokens ─────────────────────────────────────────────────────────────
+   Colores con significado fijo:
+   ok = presente / a pagar · deuda = adelantos · mal = faltas y reclamos ·
+   info = jornada distinta de 1 · marca = identidad (naranja obra).        */
+@theme inline {
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-borde: var(--borde);
+  --color-tinta: var(--tinta);
+  --color-tinta-2: var(--tinta-2);
+  --color-tinta-3: var(--tinta-3);
+  --color-marca: var(--marca);
+  --color-marca-suave: var(--marca-suave);
+  --color-ok: var(--ok);
+  --color-ok-suave: var(--ok-suave);
+  --color-deuda: var(--deuda);
+  --color-deuda-suave: var(--deuda-suave);
+  --color-mal: var(--mal);
+  --color-mal-suave: var(--mal-suave);
+  --color-info: var(--info);
+  --color-info-suave: var(--info-suave);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-body {
-  background-color: #f8fafc;
-  color: #1e293b;
-  font-family: 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif;
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
+:root {
+  color-scheme: light;
+  --fondo: #f3f2ef;
+  --superficie: #ffffff;
+  --superficie-2: #f6f5f2;
+  --borde: #e4e1db;
+  --tinta: #1c1917;
+  --tinta-2: #57534e;
+  --tinta-3: #8f8983;
+  --marca: #ea580c;
+  --marca-suave: #ffedd5;
+  --ok: #15803d;
+  --ok-suave: #dcfce7;
+  --deuda: #b45309;
+  --deuda-suave: #fef3c7;
+  --mal: #dc2626;
+  --mal-suave: #fee2e2;
+  --info: #2563eb;
+  --info-suave: #dbeafe;
+  --sombra: 0 1px 2px rgb(28 25 23 / 0.06), 0 4px 14px rgb(28 25 23 / 0.06);
+  --sombra-alta: 0 -8px 30px rgb(28 25 23 / 0.16);
 }
 
-#root {
-  min-height: 100vh;
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --fondo: #0c0a09;
+    --superficie: #1c1917;
+    --superficie-2: #24211f;
+    --borde: #36322f;
+    --tinta: #fafaf9;
+    --tinta-2: #d6d3d1;
+    --tinta-3: #8f8983;
+    --marca: #fb923c;
+    --marca-suave: rgb(251 146 60 / 0.16);
+    --ok: #4ade80;
+    --ok-suave: rgb(74 222 128 / 0.15);
+    --deuda: #fbbf24;
+    --deuda-suave: rgb(251 191 36 / 0.14);
+    --mal: #f87171;
+    --mal-suave: rgb(248 113 113 / 0.15);
+    --info: #60a5fa;
+    --info-suave: rgb(96 165 250 / 0.16);
+    --sombra: 0 1px 2px rgb(0 0 0 / 0.4);
+    --sombra-alta: 0 -8px 30px rgb(0 0 0 / 0.5);
+  }
 }
 
-/* Reusable form classes */
-.input {
+/* ── Base (en una capa, así las utilidades de Tailwind la pueden pisar) ── */
+@layer base {
+  html {
+    background: var(--fondo);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* En iOS, los inputs de menos de 16px hacen zoom al enfocarlos. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--marca);
+    outline-offset: 2px;
+  }
+
+  /* Zonas donde se mantiene apretado: sin selección ni menú contextual. */
+  .sin-seleccion {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .pt-seguro {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-seguro {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ── Piezas reutilizables ─────────────────────────────────────────────── */
+@utility tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 1.25rem;
+  box-shadow: var(--sombra);
+}
+
+@utility campo {
   width: 100%;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.75rem;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.9375rem;
-  color: #1e293b;
-  background: white;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  border-radius: 0.875rem;
+  padding: 0.75rem 0.875rem;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  &::placeholder {
+    color: var(--tinta-3);
+  }
+  &:focus {
+    border-color: var(--marca);
+    box-shadow: 0 0 0 3px var(--marca-suave);
+  }
 }
 
-.input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.input::placeholder { color: #94a3b8; }
-
-.label {
+@utility etiqueta {
   display: block;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--tinta-2);
   margin-bottom: 0.375rem;
 }
 
-/* Smooth transitions */
-* { transition-property: background-color, border-color, color, opacity, transform; transition-duration: 0.12s; }
-button, a { cursor: pointer; }
-button:disabled { cursor: not-allowed; }
+@utility btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0 1.125rem;
+  border-radius: 0.875rem;
+  font-weight: 650;
+  transition: transform 0.12s, background-color 0.15s, opacity 0.15s;
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  &:disabled {
+    opacity: 0.45;
+  }
+}
 
-/* Mobile tap highlight */
-button, a { -webkit-tap-highlight-color: transparent; }
+@utility btn-primario {
+  background: var(--tinta);
+  color: var(--superficie);
+}
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+@utility btn-marca {
+  background: var(--marca);
+  color: #fff;
+}
 
+@utility btn-suave {
+  background: var(--superficie-2);
+  color: var(--tinta);
+  border: 1px solid var(--borde);
+}
+
+@utility btn-peligro {
+  background: var(--mal-suave);
+  color: var(--mal);
+}
+
+@utility chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Brillo de carga */
+@keyframes brillo {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@utility esqueleto {
+  border-radius: 0.75rem;
+  background: linear-gradient(90deg, var(--superficie-2) 25%, var(--borde) 50%, var(--superficie-2) 75%);
+  background-size: 200% 100%;
+  animation: brillo 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto {
+    animation: none;
+  }
+}

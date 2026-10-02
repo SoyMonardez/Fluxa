@@ -1,16 +1,11 @@
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY . .
-
-RUN mkdir -p uploads
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 3001
-
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
