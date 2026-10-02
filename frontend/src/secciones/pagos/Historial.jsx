@@ -1,31 +1,15 @@
-import { useEffect, useState } from 'react';
 import { ChevronRight, Receipt } from 'lucide-react';
-import { listaPagos } from '../../lib/acciones';
-import { avisarError } from '../../lib/avisos';
+import { usePagos } from '../../lib/consultas';
 import { conDia, corta, semanaDePago } from '../../lib/fechas';
 import { jornales, pesos } from '../../lib/formato';
 import { abrir } from '../../lib/hojas';
-import { useEstado } from '../../lib/store';
 import { Vacio } from '../../ui/campos';
-import { Esqueleto } from '../../ui/pagina';
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export default function Historial() {
-  const [pagos, setPagos] = useState(null);
-  const version = useEstado((s) => s.version);
+  const pagos = usePagos();
 
-  useEffect(() => {
-    let vivo = true;
-    listaPagos()
-      .then((p) => vivo && setPagos(p))
-      .catch(avisarError);
-    return () => {
-      vivo = false;
-    };
-  }, [version]);
-
-  if (!pagos) return <Esqueleto filas={4} />;
   if (!pagos.length) return <Vacio icono={Receipt} titulo="Todavía no hay pagos" texto="Cuando confirmes el primer pago del viernes, va a aparecer acá." />;
 
   // Agrupados por mes
@@ -39,7 +23,7 @@ export default function Historial() {
   }
 
   return (
-    <div className="pb-6">
+    <div className="animar-subir pb-6">
       {grupos.map((g) => (
         <section key={g.clave}>
           <div className="flex items-baseline justify-between px-1 pt-5 pb-2">

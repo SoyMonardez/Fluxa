@@ -1,13 +1,13 @@
 // P8: inventario de herramientas y máquinas, y dónde está cada una.
 import { useMemo, useState } from 'react';
-import { AnimatePresence, m } from 'motion/react';
 import { Plus, Search, Truck, Wrench } from 'lucide-react';
 import { buscar, enObras, stockPorHerramienta } from '../../lib/derivados';
 import { colorDe } from '../../lib/formato';
 import { abrir } from '../../lib/hojas';
 import { useEstado } from '../../lib/store';
-import { Buscador, Vacio } from '../../ui/campos';
+import { BuscadorPlegable, Vacio } from '../../ui/campos';
 import { BotonFlotante, BotonIcono, Contenido, Encabezado } from '../../ui/pagina';
+import { useBusqueda } from '../../ui/useBusqueda';
 
 const FILTROS = [
   { valor: 'todas', texto: 'Todas' },
@@ -22,8 +22,8 @@ export default function Herramientas() {
   const stock = useEstado((s) => s.stock);
   const cuadrillas = useEstado((s) => s.cuadrillas);
   const [filtro, setFiltro] = useState('todas');
-  const [buscando, setBuscando] = useState(false);
-  const [texto, setTexto] = useState('');
+  const busqueda = useBusqueda();
+  const texto = busqueda.texto;
 
   const porH = useMemo(() => stockPorHerramienta(stock), [stock]);
   const cuadrillaDe = useMemo(() => new Map(cuadrillas.map((c) => [c.id, c])), [cuadrillas]);
@@ -54,24 +54,16 @@ export default function Herramientas() {
       <Encabezado
         titulo="Herramientas"
         subtitulo={`${unidades} unidades · ${enPanol} en el pañol · ${unidades - enPanol} en obra`}
-        derecha={<BotonIcono icono={Search} etiqueta="Buscar" activo={buscando} onClick={() => (setBuscando((b) => !b), setTexto(''))} />}
+        derecha={<BotonIcono icono={Search} etiqueta="Buscar" activo={busqueda.buscando} onClick={busqueda.alternar} />}
       >
-        <AnimatePresence initial={false}>
-          {buscando && (
-            <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-              <div className="pt-2">
-                <Buscador valor={texto} onCambio={setTexto} placeholder="¿Qué buscás? Ej: hormigonera" autoFocus />
-              </div>
-            </m.div>
-          )}
-        </AnimatePresence>
+        <BuscadorPlegable busqueda={busqueda} placeholder="¿Qué buscás? Ej: hormigonera" />
         <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none]">
           {FILTROS.map((f) => (
             <button
               key={f.valor}
               type="button"
               onClick={() => setFiltro(f.valor)}
-              className={`chip h-8 shrink-0 border px-3 text-[13px] ${filtro === f.valor ? 'border-tinta bg-tinta text-superficie' : 'border-borde bg-superficie text-tinta-2'}`}
+              className={`chip h-8 shrink-0 border px-3 text-[13px] transition-colors ${filtro === f.valor ? 'border-tinta bg-tinta text-superficie' : 'border-borde bg-superficie text-tinta-2'}`}
             >
               {f.texto}
             </button>
@@ -123,13 +115,12 @@ function Reparto({ total, panol, lugares, cuadrillaDe }) {
   if (!total) return <div className="mt-1.5 h-1.5 rounded-full bg-superficie-2" />;
   return (
     <div className="mt-1.5 flex h-1.5 gap-0.5 overflow-hidden rounded-full">
-      {panol > 0 && <span className="h-full rounded-full bg-tinta-3/40" style={{ flex: panol }} />}
+      {panol > 0 && <span className="h-full rounded-full bg-tinta-3/40 transition-[flex-grow] duration-500" style={{ flexGrow: panol }} />}
       {lugares.map((l) => (
-        <m.span
+        <span
           key={l.cuadrilla_id}
-          layout
-          className="h-full rounded-full"
-          style={{ flex: l.cantidad, background: colorDe(cuadrillaDe.get(l.cuadrilla_id)?.color) }}
+          className="h-full rounded-full transition-[flex-grow] duration-500"
+          style={{ flexGrow: l.cantidad, background: colorDe(cuadrillaDe.get(l.cuadrilla_id)?.color) }}
         />
       ))}
     </div>

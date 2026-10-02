@@ -9,6 +9,14 @@ node_modules/
 frontend/dist/
 frontend/dev-dist/
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
 # Logs
 *.log
 npm-debug.log*

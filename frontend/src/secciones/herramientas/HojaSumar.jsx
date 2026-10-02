@@ -1,6 +1,6 @@
 // Sumar unidades al inventario (compra, apareció la que faltaba, se arregló).
 import { useState } from 'react';
-import { guardarHerramienta } from '../../lib/acciones';
+import { sumarUnidades } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
 import { cerrar } from '../../lib/hojas';
 import { useEstado } from '../../lib/store';
@@ -13,18 +13,15 @@ export default function HojaSumar({ herramientaId }) {
   const h = useEstado((s) => s.herramientas.find((x) => x.id === herramientaId));
   const [n, setN] = useState(1);
   const [motivo, setMotivo] = useState('Compra');
-  const [enviando, setEnviando] = useState(false);
   if (!h) return <Hoja titulo="Sumar unidades" />;
 
-  async function sumar() {
-    setEnviando(true);
+  function sumar() {
     try {
-      await guardarHerramienta({ nombre: h.nombre, tipo: h.tipo, valor: h.valor, nota: h.nota, cantidad: h.cantidad + n, motivo }, h.id);
+      sumarUnidades(h.id, n, motivo);
       avisar(`+${n} ${h.nombre} en el pañol`);
       cerrar();
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -33,7 +30,7 @@ export default function HojaSumar({ herramientaId }) {
       titulo={`Sumar ${h.nombre}`}
       subtitulo={`Ahora hay ${h.cantidad}. Las nuevas quedan en el pañol.`}
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={enviando} onClick={sumar}>
+        <button type="button" className="btn btn-primario w-full" onClick={sumar}>
           Sumar {n} (quedan {h.cantidad + n})
         </button>
       }
@@ -49,7 +46,7 @@ export default function HojaSumar({ herramientaId }) {
             key={m}
             type="button"
             onClick={() => setMotivo(m)}
-            className={`rounded-full border px-3.5 py-2 text-sm font-semibold ${motivo === m ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
+            className={`rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors ${motivo === m ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
           >
             {m}
           </button>

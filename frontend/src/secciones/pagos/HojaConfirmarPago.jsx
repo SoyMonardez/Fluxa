@@ -1,13 +1,13 @@
 // F5 (final): resumen del pago antes de confirmarlo; después, compartir por WhatsApp.
 import { useState } from 'react';
-import { m } from 'motion/react';
-import { Share2 } from 'lucide-react';
+import { CloudOff, Share2 } from 'lucide-react';
 import { pagar } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
 import { conDia, hoy, rango, semanaDePago } from '../../lib/fechas';
 import { jornales, mas, menos, pesos } from '../../lib/formato';
 import { cerrar } from '../../lib/hojas';
 import { compartir, resumenPago } from '../../lib/resumen';
+import { useEstado } from '../../lib/store';
 import { vibrar } from '../../lib/vibrar';
 import { Renglon } from '../../ui/campos';
 import Hoja from '../../ui/Hoja';
@@ -15,23 +15,16 @@ import Hoja from '../../ui/Hoja';
 export default function HojaConfirmarPago({ hasta, items, totales, deudaQueda }) {
   const [fecha, setFecha] = useState(hoy);
   const [nota, setNota] = useState('');
-  const [enviando, setEnviando] = useState(false);
   const [pago, setPago] = useState(null);
+  const enLinea = useEstado((s) => s.enLinea);
 
-  async function confirmar() {
-    setEnviando(true);
+  function confirmar() {
     try {
-      const p = await pagar({
-        hasta,
-        fecha,
-        nota: nota.trim(),
-        items: items.map((i) => ({ obrero_id: i.obrero_id, descuento: i.descuento, plus: i.plus, nota: i.nota.trim() })),
-      });
+      const p = pagar({ hasta, fecha, nota, items });
       vibrar([18, 60, 18]);
       setPago(p);
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -60,33 +53,34 @@ export default function HojaConfirmarPago({ hasta, items, totales, deudaQueda })
         }
       >
         <div className="flex flex-col items-center py-4 text-center">
-          <m.div
-            className="grid h-24 w-24 place-items-center rounded-full bg-ok"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', damping: 11, stiffness: 220 }}
-          >
+          <div className="animar-crecer grid h-24 w-24 place-items-center rounded-full bg-ok">
             <svg viewBox="0 0 24 24" className="h-12 w-12" aria-hidden="true">
-              <m.path
+              <path
                 d="M4.5 12.5l4.6 4.6L19.5 6.8"
+                pathLength={1}
+                className="animar-trazo"
+                style={{ animationDelay: '0.2s', animationDuration: '0.35s' }}
                 fill="none"
                 stroke="white"
                 strokeWidth={3}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ delay: 0.2, duration: 0.35 }}
               />
             </svg>
-          </m.div>
-          <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          </div>
+          <div className="animar-subir" style={{ animationDelay: '0.25s' }}>
             <p className="num mt-4 text-3xl font-extrabold">{pesos(pago.total_neto)}</p>
             <p className="mt-1 text-tinta-2">
               {pago.items.length} obreros · pagado el {conDia(pago.fecha)}
             </p>
             <p className="mt-3 text-sm text-tinta-3">Los días quedaron pagados y bloqueados. Si hay que corregir algo, se puede anular desde el historial.</p>
-          </m.div>
+            {!enLinea && (
+              <p className="mt-3 flex items-start gap-2 rounded-2xl bg-deuda-suave p-3 text-left text-sm text-deuda">
+                <CloudOff size={18} className="mt-px shrink-0" />
+                Quedó guardado en el teléfono y se sube solo cuando haya señal.
+              </p>
+            )}
+          </div>
         </div>
       </Hoja>
     );
@@ -97,8 +91,8 @@ export default function HojaConfirmarPago({ hasta, items, totales, deudaQueda })
       titulo="Confirmar pago"
       subtitulo={`Semana ${rango(semanaDePago(hasta))}`}
       pie={
-        <button type="button" className="btn btn-primario h-14 w-full text-base" disabled={enviando} onClick={confirmar}>
-          {enviando ? 'Registrando…' : `Confirmar pago de ${pesos(totales.neto)}`}
+        <button type="button" className="btn btn-primario h-14 w-full text-base" onClick={confirmar}>
+          Confirmar pago de {pesos(totales.neto)}
         </button>
       }
     >

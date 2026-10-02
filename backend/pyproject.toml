@@ -1,0 +1,13 @@
+[project]
+name = "fluxa-backend"
+version = "3.0.0"
+description = "API de Fluxa / ETEM: asistencia, pagos, adelantos, cuadrillas y herramientas"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning:fastapi.testclient", "ignore:Using `httpx`"]
+
+[tool.ruff]
+line-length = 130

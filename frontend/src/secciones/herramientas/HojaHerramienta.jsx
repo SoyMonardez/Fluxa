@@ -1,8 +1,8 @@
 // Una herramienta: dónde está cada unidad, quién responde, y acciones.
-import { useEffect, useState } from 'react';
 import { KeyRound, PackagePlus, Pencil, ShieldAlert, Trash2, Truck, Warehouse, Wrench } from 'lucide-react';
-import { borrarHerramienta, movimientos } from '../../lib/acciones';
+import { borrarHerramienta } from '../../lib/acciones';
 import { avisar } from '../../lib/avisos';
+import { useMovimientos } from '../../lib/consultas';
 import { enObras } from '../../lib/derivados';
 import { colorDe, pesos } from '../../lib/formato';
 import { abrir } from '../../lib/hojas';
@@ -15,17 +15,7 @@ export default function HojaHerramienta({ herramientaId }) {
   const stock = useEstado((s) => s.stock);
   const cuadrillas = useEstado((s) => s.cuadrillas);
   const obreros = useEstado((s) => s.obreros);
-  const [movs, setMovs] = useState(null);
-
-  useEffect(() => {
-    let vivo = true;
-    movimientos({ herramientaId, limite: 20 })
-      .then((r) => vivo && setMovs(r))
-      .catch(() => {});
-    return () => {
-      vivo = false;
-    };
-  }, [herramientaId, stock, h?.cantidad]);
+  const movs = useMovimientos({ herramientaId, limite: 20 });
 
   if (!h) return <Hoja titulo="Herramienta" />;
 
@@ -39,8 +29,8 @@ export default function HojaHerramienta({ herramientaId }) {
       texto: 'Deja de aparecer en el inventario. El historial de movimientos se conserva.',
       confirmar: 'Borrar',
       peligro: true,
-      onConfirmar: async () => {
-        await borrarHerramienta(h.id);
+      onConfirmar: () => {
+        borrarHerramienta(h.id);
         avisar(`${h.nombre} borrada`);
         return 2;
       },

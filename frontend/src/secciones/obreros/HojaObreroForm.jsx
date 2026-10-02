@@ -1,6 +1,5 @@
 // F9: alta y edición de obreros. "Guardar y agregar otro" para cargar a todos de una vez.
 import { useMemo, useRef, useState } from 'react';
-import { m } from 'motion/react';
 import { UserMinus, UserRoundCheck } from 'lucide-react';
 import { darDeBaja, guardarObrero, reactivar } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
@@ -30,7 +29,6 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
       ? { nombre: existente.nombre, rol: existente.rol, jornal: existente.jornal, telefono: existente.telefono, nota: existente.nota, cuadrilla_id: existente.cuadrilla_id }
       : vacio(cuadrillaId)
   );
-  const [enviando, setEnviando] = useState(false);
   const [cargados, setCargados] = useState(0);
   const nombreRef = useRef(null);
 
@@ -39,16 +37,14 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
   const roles = ROLES.includes(d.rol) ? ROLES : [...ROLES, d.rol];
   const valido = d.nombre.trim() && d.jornal > 0;
 
-  async function guardar(otro) {
+  function guardar(otro) {
     if (!valido) return;
-    setEnviando(true);
     try {
-      const o = await guardarObrero({ ...d, nombre: d.nombre.trim(), telefono: d.telefono.trim(), nota: d.nota.trim() }, obreroId);
+      const o = guardarObrero(d, obreroId);
       if (otro) {
         setCargados((n) => n + 1);
         avisar(`${o.nombre} cargado`);
         setD((x) => ({ ...vacio(x.cuadrilla_id), rol: x.rol, jornal: x.jornal }));
-        setEnviando(false);
         nombreRef.current?.focus();
       } else {
         avisar(obreroId ? 'Cambios guardados' : `${o.nombre} cargado`);
@@ -56,7 +52,6 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
       }
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -66,8 +61,8 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
       texto: 'Deja de aparecer en la asistencia y sale de su cuadrilla. Su historia (días, adelantos y pagos) se conserva y lo podés reactivar cuando quieras.',
       confirmar: 'Dar de baja',
       peligro: true,
-      onConfirmar: async () => {
-        await darDeBaja(existente.id);
+      onConfirmar: () => {
+        darDeBaja(existente.id);
         avisar(`${existente.nombre} dado de baja`);
         return 2;
       },
@@ -81,11 +76,11 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
       pie={
         <div className="flex gap-2">
           {!obreroId && (
-            <button type="button" className="btn btn-suave flex-1 px-2 text-sm" disabled={!valido || enviando} onClick={() => guardar(true)}>
+            <button type="button" className="btn btn-suave flex-1 px-2 text-sm" disabled={!valido} onClick={() => guardar(true)}>
               Guardar y otro
             </button>
           )}
-          <button type="button" className="btn btn-primario flex-1" disabled={!valido || enviando} onClick={() => guardar(false)}>
+          <button type="button" className="btn btn-primario flex-1" disabled={!valido} onClick={() => guardar(false)}>
             {obreroId ? 'Guardar cambios' : 'Guardar'}
           </button>
         </div>
@@ -123,10 +118,9 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
                 key={r}
                 type="button"
                 onClick={() => set('rol')(r)}
-                className={`relative rounded-xl border px-3 py-2.5 text-sm font-semibold ${d.rol === r ? 'border-tinta' : 'border-borde text-tinta-2'}`}
+                className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${d.rol === r ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
               >
-                {d.rol === r && <m.span layoutId="rol-elegido" className="absolute inset-0 rounded-[0.7rem] bg-superficie-2" />}
-                <span className="relative">{r}</span>
+                {r}
               </button>
             ))}
           </div>
@@ -152,7 +146,7 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
                   key={c.id ?? 'ninguna'}
                   type="button"
                   onClick={() => set('cuadrilla_id')(c.id)}
-                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold ${activa ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${activa ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
                 >
                   {c.color && <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorDe(c.color) }} />}
                   {c.nombre}
@@ -198,14 +192,15 @@ export default function HojaObreroForm({ obreroId, cuadrillaId = null }) {
             <button
               type="button"
               className="btn btn-suave w-full"
-              onClick={() =>
-                reactivar(existente.id)
-                  .then(() => {
-                    avisar(`${existente.nombre} reactivado`);
-                    cerrar();
-                  })
-                  .catch(avisarError)
-              }
+              onClick={() => {
+                try {
+                  reactivar(existente.id);
+                  avisar(`${existente.nombre} reactivado`);
+                  cerrar();
+                } catch (e) {
+                  avisarError(e);
+                }
+              }}
             >
               <UserRoundCheck size={18} /> Reactivar
             </button>

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { m } from 'motion/react';
 import { Check } from 'lucide-react';
 import { guardarCuadrilla } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
@@ -16,17 +15,12 @@ export default function HojaCuadrillaForm({ cuadrillaId }) {
       ? { nombre: existente.nombre, obra: existente.obra, color: existente.color }
       : { nombre: '', obra: '', color: Object.keys(COLORES).find((k) => !cuadrillas.some((c) => c.color === k)) ?? 'naranja' }
   );
-  const [enviando, setEnviando] = useState(false);
 
-  async function guardar(e) {
+  function guardar(e) {
     e?.preventDefault();
     if (!d.nombre.trim()) return;
-    setEnviando(true);
     try {
-      const id = await guardarCuadrilla(
-        { nombre: d.nombre.trim(), obra: d.obra.trim(), color: d.color, encargado_id: existente?.encargado_id ?? null },
-        cuadrillaId
-      );
+      const id = guardarCuadrilla({ nombre: d.nombre, obra: d.obra, color: d.color, encargado_id: existente?.encargado_id ?? null }, cuadrillaId);
       if (cuadrillaId) {
         avisar('Cuadrilla actualizada');
         cerrar();
@@ -36,7 +30,6 @@ export default function HojaCuadrillaForm({ cuadrillaId }) {
       }
     } catch (err) {
       avisarError(err);
-      setEnviando(false);
     }
   }
 
@@ -44,7 +37,7 @@ export default function HojaCuadrillaForm({ cuadrillaId }) {
     <Hoja
       titulo={cuadrillaId ? 'Editar cuadrilla' : 'Nueva cuadrilla'}
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={!d.nombre.trim() || enviando} onClick={guardar}>
+        <button type="button" className="btn btn-primario w-full" disabled={!d.nombre.trim()} onClick={guardar}>
           {cuadrillaId ? 'Guardar cambios' : 'Crear cuadrilla'}
         </button>
       }
@@ -87,13 +80,12 @@ export default function HojaCuadrillaForm({ cuadrillaId }) {
                 aria-label={nombre}
                 aria-pressed={d.color === nombre}
                 onClick={() => setD({ ...d, color: nombre })}
-                className="relative grid h-11 w-11 place-items-center rounded-full"
+                className={`grid h-11 w-11 place-items-center rounded-full ring-tinta ring-offset-2 ring-offset-superficie transition-[box-shadow,scale] active:scale-90 ${
+                  d.color === nombre ? 'ring-[3px]' : 'ring-0'
+                }`}
                 style={{ background: hex }}
               >
-                {d.color === nombre && (
-                  <m.span layoutId="color-elegido" className="absolute -inset-1 rounded-full border-[3px] border-tinta" />
-                )}
-                {d.color === nombre && <Check size={20} strokeWidth={3} className="text-white" />}
+                {d.color === nombre && <Check size={20} strokeWidth={3} className="animar-crecer text-white" />}
               </button>
             ))}
           </div>

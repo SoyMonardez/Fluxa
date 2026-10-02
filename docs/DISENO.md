@@ -1,9 +1,11 @@
 # Fluxa / ETEM — Diseño del sistema
 
-Este documento se escribió **antes** de programar, en el orden que pediste:
-primero los **patrones de uso**, después los **flujos**, y recién ahí las
-**funcionalidades** (reglas, datos y pantallas). Todo lo que está acá está
-implementado en la app.
+Este documento se escribió **antes** de programar, en el orden pedido: primero los
+**patrones de uso**, después los **flujos**, y recién ahí las **funcionalidades**
+(reglas, datos, arquitectura y pantallas). Todo lo que está acá está implementado.
+
+**Stack:** React (celular primero, instalable) · Python (FastAPI) · PostgreSQL.
+**Principio rector:** la app tiene que andar **igual con o sin internet**.
 
 ---
 
@@ -21,17 +23,14 @@ implementado en la app.
 | Lista de herramientas y máquinas de la empresa | **Herramientas** (pañol): inventario con cantidades |
 | Qué herramienta se llevó cada obra y quién responde | **Cuadrillas**: integrantes, **encargado**, herramientas y reclamos |
 
-### Lo que se sacó del sistema anterior (no se usaba)
+### Lo que se sacó (no se usaba)
 
 - Obras con clientes e ingresos, **Proveedores**, **Comprobantes** (subida de archivos),
-  **Dashboard** con gráficos y la página de Finanzas (que ni estaba conectada).
-- Asistencia **por obra** y sueldo **por asignación a obra** (vos tomás asistencia general
-  y cada obrero tiene un único jornal).
-- Código muerto (`AttendanceMatrix.jsx`, `Finanzas.jsx`, `routes/finanzas.js`), restos de la
-  plantilla de Vite y dependencias sin uso: axios, recharts, react-router, react-hot-toast,
-  clsx, tailwind-merge, react-is, multer, cors.
-- Las tablas viejas **no se borran**: al arrancar, el sistema las renombra a `legacy_*`
-  (ver §6.3). Si no las necesitás, se pueden eliminar a mano.
+  **Dashboard** con gráficos, asistencia **por obra** y sueldo **por obra**.
+- Todo el backend en Node/Express/MySQL y el servidor nginx: ahora es **un solo servicio en
+  Python** que sirve la API y la app, más PostgreSQL.
+- Librerías pesadas del frontend (router, axios, gráficos, toasts, animaciones): la app usa
+  sólo **React** y animaciones **CSS** propias.
 
 ---
 
@@ -39,11 +38,10 @@ implementado en la app.
 
 - **Usuario principal**: el dueño / administrador. Usa la app **casi siempre desde el
   celular**, parado, en la obra o en el auto, muchas veces con una sola mano y con sol.
-- **Señal**: a veces mala en obra → lo frecuente (pasar lista) tiene que funcionar
-  sin conexión y sincronizar solo.
+- **Señal**: mala o nula en muchas obras → **todo** tiene que funcionar sin conexión.
 - **Volumen**: de 10 a 60 obreros, varias cuadrillas, cientos de herramientas.
 
-De ahí salen los principios de diseño:
+Principios de diseño:
 
 1. **Lo frecuente, a un toque.** Pasar lista y dar un adelanto no pueden tener formularios.
 2. **Una sección resuelve varias cosas.** Desde Asistencia se marca, se ajusta la jornada,
@@ -52,6 +50,9 @@ De ahí salen los principios de diseño:
 4. **Nada se pierde**: todo se puede deshacer o anular, y lo pagado queda bloqueado.
 5. **Pulgar primero**: navegación abajo, botones grandes (≥ 44 px), paneles que suben
    desde abajo y se cierran arrastrando.
+6. **Primero el teléfono, después el servidor**: cada cambio se guarda en el celular al
+   instante y se sube solo cuando hay señal. Nunca hay que esperar a la red.
+7. **Liviana**: abre en menos de un segundo, ocupa poco y se instala como una app.
 
 ---
 
@@ -63,12 +64,14 @@ De ahí salen los principios de diseño:
 | P2 | **Ajustar jornada** | Varias por semana | Mismo momento que P1 o a la tarde | Poner ½, 1½ (medio día más) o doble | 2 toques |
 | P3 | **Dar un adelanto** | Varias por semana, en cualquier momento | Le piden plata en la obra | Encontrar al obrero, ver si le alcanza, anotar el monto | < 10 s |
 | P4 | **Consultar cuánto le queda** | Diario | "¿Cuánto me queda para el viernes?" | Ganado sin pagar − adelantos | 0 toques (visible en la lista) |
-| P5 | **Día de pago** | Semanal (viernes) | Oficina o auto, armando los sobres | Total a juntar, detalle por obrero, decidir descuento de adelantos, plus, confirmar y compartir | < 2 min |
+| P5 | **Día de pago** | Semanal (viernes) | Oficina, auto u obra, armando los sobres | Total a juntar, detalle por obrero, decidir descuento de adelantos, plus, confirmar y compartir | < 2 min |
 | P6 | **Repartir herramientas** | Semanal / al arrancar obra | En el pañol o en la obra | Mandar varias herramientas a una cuadrilla, mover entre obras, devolver | 1 pantalla |
 | P7 | **Reclamo** | Ocasional | Se robaron, falta o se rompió algo | Registrar a nombre del encargado y, si corresponde, cobrárselo | 1 panel |
 | P8 | **¿Dónde está tal herramienta?** | Ocasional | Alguien pide una máquina | Buscar y ver en qué obra está y quién responde | Búsqueda |
 | P9 | **Altas y cambios de personal** | Ocasional | Entra alguien nuevo / aumento | Cargar nombre + rol + jornal; cambiar jornal | 1 formulario |
 | P10 | **Armar cuadrillas** | Al arrancar obra | Planificación | Nombre de la obra, integrantes, encargado | 1 pantalla |
+| P11 | **Trabajar sin señal** | Cualquier día | Obra sin cobertura, subsuelo, ruta | Hacer **todo** lo anterior igual y que se suba solo después | Sin diferencias |
+| P12 | **Tenerla como app** | Una vez | Primer uso en el celular | Instalarla en la pantalla de inicio y abrirla sin navegador | 2 toques |
 
 ---
 
@@ -84,15 +87,18 @@ Barra inferior fija con 5 secciones (la app abre en **Asistencia**, lo más usad
 
 | Sección | Qué se puede hacer desde ahí (sin salir) |
 |---|---|
-| **Asistencia** | Ver el día o la semana · tilde por obrero · "Todos ✓" por cuadrilla · jornada ½/1/1½/2 · ver *lleva / adelantos / le queda* · dar adelanto · buscar · cambiar de día deslizando |
-| **Pagos** | Próximo pago (corte viernes) · total a pagar · detalle por obrero con los días · descontar adelantos ahora o después (o una parte) · plus · excluir a alguien · confirmar · compartir por WhatsApp · historial · anular un pago |
+| **Asistencia** | Ver el día o la semana · tilde por obrero · "Todos" por cuadrilla · jornada ½/1/1½/2 · ver *adelantos / le queda* · dar adelanto · buscar · cambiar de día deslizando |
+| **Pagos** | Próximo pago (corte viernes) · total a pagar · detalle por obrero con los días · descontar adelantos todo / una parte / después · plus · excluir a alguien · confirmar · compartir por WhatsApp · historial · anular un pago |
 | **Cuadrillas** | Crear cuadrilla (obra) · integrantes · elegir encargado · entregar herramientas del pañol · devolver / mover a otra obra · reclamo (robo, faltante, rotura) · historial · cerrar cuadrilla |
 | **Herramientas** | Inventario de herramientas y máquinas · cantidades por lugar (pañol y obras) · enviar a una obra · sumar unidades · reclamo · movimientos |
 | **Obreros** | Alta rápida (con "guardar y agregar otro") · editar jornal/rol/cuadrilla · ficha con cuenta (días sin pagar, adelantos, pagos) · adelanto · WhatsApp / llamar · dar de baja / reactivar |
 
+En todas las secciones, arriba, un **indicador de sincronización**: nube tachada con el número
+de cambios que esperan señal; al volver la conexión se suben solos.
+
 Paneles (se abren desde abajo, se cierran arrastrando hacia abajo o con el botón *atrás*
-del celular): ficha rápida del obrero, jornada, adelanto, formularios, reparto de
-herramientas, reclamo, confirmación de pago.
+del celular): ficha del obrero, jornada, adelanto, formularios, reparto de herramientas,
+reclamo, confirmación de pago, menú.
 
 ---
 
@@ -100,28 +106,27 @@ herramientas, reclamo, confirmación de pago.
 
 ### F1 · Pasar lista (P1)
 1. Abrís la app → **Asistencia** de hoy, obreros agrupados por cuadrilla.
-2. En cada cuadrilla tocás **Todos ✓** → se marcan todos con 1 jornal (animación en cascada).
-3. Tocás el tilde de los que faltaron para desmarcarlos.
-4. Arriba ves "**14 de 16 presentes · $ 630.000 hoy**".
+2. En cada cuadrilla tocás **Todos** → se marcan todos con 1 jornal (animación en cascada).
+3. Tocás el círculo de los que faltaron para desmarcarlos.
+4. Arriba ves "**14 de 16 presentes · $ 630.000**".
 
-*Toques: 1 por cuadrilla + 1 por falta.* Si no hay señal, los tildes quedan guardados en
-el teléfono (icono de nube) y se suben solos al volver la conexión.
+*Toques: 1 por cuadrilla + 1 por falta.* Con o sin señal es igual.
 
 ### F2 · Medio día más / doble jornada (P2)
-1. **Mantené apretado** el tilde (o tocá el chip de jornada que aparece al lado).
-2. Elegís **½ · 1 · 1½ · 2** (o **Falta**). Opcional: nota ("se quedó a hormigonar").
-3. El tilde muestra la marca (½, 1½, 2) y el total del día se actualiza.
+1. **Mantené apretado** el círculo.
+2. Elegís **½ · 1 · 1½ · 2** (o **No vino**). Opcional: nota ("se quedó a hormigonar").
+3. El círculo muestra la marca (½, 1½, 2) y el total del día se actualiza.
 
 ### F3 · Adelanto (P3)
-- **Desde Asistencia**: tocás el nombre → ficha rápida con *lleva $X · adelantos $Y ·
-  le queda $Z* → **Dar adelanto** → monto (teclado numérico + atajos que suman +5.000 /
-  +10.000 / +20.000 / +50.000) → **Anotar**. Aviso "Adelanto de $X a Juan · **Deshacer**".
-- **Botón flotante "Adelanto"** (en Asistencia): elegís obrero (con buscador) → monto → Guardar.
-- Si el adelanto supera lo que lleva ganado, la app lo avisa en ámbar (no lo impide).
+- **Desde Asistencia**: tocás el nombre → ficha con *lleva $X · adelantos $Y · le queda $Z*
+  → **Dar adelanto** → monto (teclado numérico + atajos que suman +5.000 / +10.000 /
+  +20.000 / +50.000) → **Anotar**. Aviso "Adelanto de $X a Juan · **Deshacer**".
+- **Botón flotante "Adelanto"** (en Asistencia): elegís obrero (con buscador) → monto → Anotar.
+- Si el adelanto supera lo que le queda, la app lo avisa en ámbar (no lo impide).
 
 ### F4 · ¿Cuánto le queda? (P4)
-Cada fila de Asistencia muestra: **días sin pagar · lleva $ · adel. $ · le queda $**.
-En la ficha del obrero está el detalle: días, adelantos (cuáles ya se descontaron) y pagos.
+Cada fila de Asistencia muestra **adelantos pendientes · le queda $**. En la ficha del obrero
+está el detalle: días, adelantos (cuáles ya se descontaron) y pagos.
 
 ### F5 · Día de pago (P5)
 1. **Pagos** muestra el corte "**Pago del viernes 2/10**" (semana sáb 26/9 → vie 2/10).
@@ -130,43 +135,61 @@ En la ficha del obrero está el detalle: días, adelantos (cuáles ya se descont
 3. Cada obrero: días de la semana (S D L M M J V), jornales × jornal = ganado.
    Si tiene adelantos, tocás su fila y elegís **Descontar** (todo) · **Una parte** (monto) ·
    **Después** (pasa al próximo pago).
-4. Opcional: **Plus** (ese "poquito más") con nota; o **excluir** a alguien de este pago
+4. Opcional: **Plus** (ese "poquito más") con motivo; o **excluir** a alguien de este pago
    (sus días quedan para el próximo).
 5. **Pagar $ X** → resumen (cuántos obreros, total, adelantos descontados y los que quedan
    pendientes) → **Confirmar pago**.
 6. Listo: los días quedan **pagados y bloqueados**. **Compartir** manda el resumen por
-   WhatsApp; desde el historial podés mandar el recibo a cada obrero o **anular** el pago.
+   WhatsApp; desde el historial se manda el recibo a cada obrero o se **anula** el pago.
 
 ### F6 · Repartir herramientas (P6)
-- **Cuadrillas → Plaza Funes → Entregar herramientas**: lista del pañol con buscador,
-  tocás para sumar (+1) o usás − / + → **Entregar N herramientas**. Queda registrado a
-  nombre del encargado y con fecha.
+- **Cuadrillas → Plaza Funes → Entregar**: lista del pañol con buscador, tocás para sumar
+  (+1) o usás − / + → **Entregar N herramientas**. Queda registrado a nombre del encargado.
 - En cada herramienta de la cuadrilla: **Devolver al pañol**, **Mover a otra cuadrilla** o
   **Reclamo**.
-- Desde **Herramientas** también: tocás una herramienta → **Enviar a…** cuadrilla + cantidad.
+- Desde **Herramientas** también: tocás una herramienta → **Enviar** a una cuadrilla.
 
 ### F7 · Reclamo: robo, faltante o rotura (P7)
 1. En la herramienta (dentro de la cuadrilla o en Herramientas) → **Reclamo**.
-2. Tipo: **Robo · Faltante · Rotura por mal uso**, cantidad, nota.
+2. Tipo: **Robo · Faltante · Rotura por mal uso**, cantidad, qué pasó.
 3. Se muestra **quién responde** (el encargado de la cuadrilla).
-4. Opcional: **Cobrarle $** (sugiere el valor de la herramienta × cantidad) a él u otro
-   integrante → queda como **cargo** en su cuenta y se descuenta el viernes como un adelanto.
+4. Opcional: **Cobrárselo** (sugiere el valor de la herramienta × cantidad) a él u otro
+   integrante → queda como **cargo** en su cuenta y se descuenta como un adelanto.
 5. Esas unidades salen del inventario. Si aparece o se arregla: **Sumar unidades**.
 
 ### F8 · ¿Dónde está? (P8)
 **Herramientas** → buscador → cada ítem muestra la barra de reparto
-"3 en pañol · 2 Plaza Funes · 1 Roldán" y en el detalle, quién es el encargado de cada obra.
+"3 en pañol · 2 Plaza Funes · 1 Roldán"; en el detalle, quién responde en cada obra.
 
 ### F9 · Alta de obrero (P9)
-**Obreros → +** → nombre, rol (chips: Capataz / Oficial / Medio oficial / Ayudante),
-jornal $/día, cuadrilla, teléfono → **Guardar** o **Guardar y agregar otro**
-(para cargar a todos de una vez).
+**Obreros → Nuevo** → nombre, rol (Capataz / Oficial / Medio oficial / Ayudante), jornal $/día
+(sugiere el más común de ese rol), cuadrilla, teléfono → **Guardar** o **Guardar y otro**.
 
 ### F10 · Armar cuadrilla (P10)
-**Cuadrillas → +** → nombre (ej. "Plaza Funes"), dirección/obra, color →
-**Integrantes** (selección múltiple; si alguien estaba en otra cuadrilla, se lo mueve) →
-**Encargado** (uno de los integrantes) → **Entregar herramientas**.
+**Cuadrillas → +** → nombre (ej. "Plaza Funes"), dirección, color → **Integrantes** (selección
+múltiple; quien estaba en otra cuadrilla se mueve) → **Encargado** → **Entregar herramientas**.
 Una cuadrilla sin encargado se marca en rojo: *"Falta encargado"*.
+
+### F11 · Sin señal (P11)
+1. Se usa la app normalmente: marcar, adelantos, pagar, mover herramientas, altas…
+2. Cada cambio se guarda en el celular y arriba aparece la nube tachada con **N cambios**.
+3. Al volver la señal (o al abrir la app con señal) se suben solos, en orden, y se bajan
+   los cambios hechos desde otro dispositivo. Aviso: "Se subieron los N cambios hechos sin
+   señal ✓".
+4. Si algún cambio no se pudo aplicar (ej.: ese día ya se pagó desde otro celular), avisa
+   qué fue ("No se guardó: …") y la pantalla vuelve a mostrar lo que quedó guardado.
+5. La app abre aunque no haya señal, incluso cerrándola y volviéndola a abrir.
+6. Si la sesión venció (ej.: se cambió la contraseña en otro celular), pide la clave encima
+   de la app y avisa cuántos cambios hay guardados: no se pierde nada y se suben al entrar.
+7. El menú muestra el estado: todo sincronizado / N sin subir / sin señal, la última
+   sincronización y un botón **Sincronizar ahora**.
+
+### F12 · Instalar (P12)
+- **Android**: aparece la sugerencia "Instalá ETEM en el teléfono" (y el botón en el menú)
+  → Instalar.
+- **iPhone**: Compartir → **Agregar a inicio** (la app lo explica en la sugerencia y en el menú).
+- Cuando hay una versión nueva aparece "Hay una versión nueva" con **Actualizar**: no se
+  recarga sola en medio de algo.
 
 ---
 
@@ -175,7 +198,7 @@ Una cuadrilla sin encargado se marca en rojo: *"Falta encargado"*.
 | # | Regla |
 |---|---|
 | R1 | **Semana de pago = sábado a viernes**, se paga el viernes. (Si se trabaja un sábado, se cobra el viernes siguiente.) |
-| R2 | Día trabajado = **½, 1, 1½ o 2 jornales**. **Falta = no se paga** (no se registra nada). |
+| R2 | Día trabajado = **½, 1, 1½ o 2 jornales**. **Falta = no se paga**. |
 | R3 | Ganado = jornales × **jornal del obrero** (cada uno tiene el suyo). Se toma el jornal vigente al pagar y queda guardado en el pago. |
 | R4 | **Adelantos y cargos** forman la *deuda* del obrero. En cada pago se decide cuánto descontar: por defecto todo lo posible (sin pasar lo ganado); lo que no se descuenta **pasa al próximo pago**. |
 | R5 | **A pagar = ganado + plus − descuento.** |
@@ -185,7 +208,7 @@ Una cuadrilla sin encargado se marca en rojo: *"Falta encargado"*.
 | R9 | Inventario: **total = pañol + lo que tiene cada cuadrilla**. Un reclamo da de baja esas unidades. |
 | R10 | **Cerrar una cuadrilla** devuelve todas sus herramientas al pañol y deja a sus integrantes sin cuadrilla. |
 | R11 | Un obrero **dado de baja** no aparece en Asistencia; si le quedan días sin pagar, sigue apareciendo en Pagos hasta liquidarlo. |
-| R12 | Un adelanto se puede borrar mientras no haya sido descontado en ningún pago. |
+| R12 | Un adelanto se puede borrar mientras no haya sido descontado en ningún pago. Los descuentos se aplican del adelanto más viejo al más nuevo. |
 
 ### Ejemplo de cuenta
 
@@ -203,102 +226,132 @@ lun 1 · mar 1 · mié **2** (doble) · jue 1 · vie **1½** (medio día más) =
 
 ---
 
-## 6. Modelo de datos (MySQL)
+## 6. Arquitectura: primero el teléfono
 
 ```
-usuarios           id, username, password_hash
-cuadrillas         id, nombre, obra, color, encargado_id → obreros, activa
-obreros            id, nombre, rol, jornal, telefono, nota, cuadrilla_id → cuadrillas, activo
-asistencias        id, obrero_id, fecha, jornales(0.5|1|1.5|2), nota, pago_id → pagos
-                   UNIQUE(obrero_id, fecha)  — asistencia general: 1 registro por obrero por día
-adelantos          id, obrero_id, tipo('adelanto'|'cargo'), monto, fecha, nota, movimiento_id
-pagos              id, hasta (corte), fecha (día que se pagó), totales, nota
-pago_items         id, pago_id, obrero_id, dias, jornales, jornal, bruto, plus, descuento, neto, desde
-herramientas       id, nombre, tipo('herramienta'|'maquina'), cantidad (total), valor, nota, activo
-herramienta_stock  herramienta_id, cuadrilla_id, cantidad      (pañol = total − Σ stock)
-herramienta_movs   id, herramienta_id, tipo, cantidad, desde_id, hacia_id, responsable_id, cargo, nota, fecha
-                   tipo: alta | ajuste | entrega | devolucion | traslado | robo | faltante | rotura
+ Celular (PWA instalada)                                   Servidor
+┌──────────────────────────────────────────┐          ┌───────────────────────────┐
+│ React (pantallas)                        │          │ FastAPI (Python)          │
+│   ▲ lee "lo visible"                     │          │  /api/auth  /api/sync     │
+│ Motor local                              │  HTTPS   │  aplica operaciones en    │
+│   visible = base + operaciones pendientes│ ───────► │  orden, sin duplicar      │
+│   base  ◄── cambios del servidor         │ ◄─────── │  devuelve cambios desde   │
+│   cola  ──► operaciones sin subir        │          │  el último cursor         │
+│ IndexedDB (todo guardado en el teléfono) │          ├───────────────────────────┤
+│ Service worker (la app abre sin señal)   │          │ PostgreSQL                │
+└──────────────────────────────────────────┘          └───────────────────────────┘
 ```
 
-### 6.1 Cálculos derivados
-- **Deuda** de un obrero = Σ adelantos (incluye cargos) − Σ descuentos aplicados en pagos.
-- **Pendiente** = asistencias sin `pago_id`. *Le queda* = pendiente × jornal − deuda.
-- Qué adelantos ya se descontaron se calcula por orden de antigüedad (el más viejo primero).
+- **Todo cambio es una operación** (`{id, tipo, datos, ts}`) con un `id` único generado en
+  el celular. Se aplica en el teléfono al instante (mismas reglas que el servidor), se guarda
+  en la **cola** y se sube cuando hay señal.
+- Los registros nuevos (obreros, cuadrillas, herramientas, adelantos, pagos) también llevan
+  **ids generados en el celular** (UUID): así se pueden crear y usar sin señal.
+- **Lo visible = base del servidor + operaciones pendientes.** Cuando el servidor responde,
+  la base se actualiza, se sacan de la cola las operaciones confirmadas o rechazadas y se
+  vuelven a aplicar las que siguen pendientes. Si el servidor rechazó algo, desaparece solo
+  y se avisa el motivo.
+- **Cálculos en el teléfono**: deuda, días sin pagar, *le queda*, el próximo pago completo,
+  la cuenta de cada obrero y el stock por obra se calculan localmente. Por eso todo anda sin
+  señal y responde al instante.
+- **Servicio único**: el mismo proceso Python sirve la API y los archivos de la app
+  (comprimidos y con caché larga). Delante va Caddy con HTTPS automático (sin HTTPS los
+  celulares no permiten instalar la app ni usarla sin conexión).
 
-### 6.2 Fechas
-Todas las fechas son del calendario local (Argentina). La app envía siempre `YYYY-MM-DD`
-y la base las devuelve como texto, sin zonas horarias (evita el error de "día corrido" a la
-noche que tenía el sistema anterior).
+### 6.1 Sincronización (`/api/sync`)
 
-### 6.3 Migración desde el sistema anterior
-Al iniciar, `initDB` detecta las tablas viejas (`proyectos`, `trabajadores`,
-`asignaciones`, `asistencias` por obra, `ingresos_obra`, `gastos_proveedor`,
-`comprobantes`) y las **renombra a `legacy_*`** sin borrar datos. Si había trabajadores
-cargados, se copian a `obreros` con su último jornal. La asistencia vieja **no** se copia
-(si no, aparecería como deuda a pagar).
+| Pieza | Cómo funciona |
+|---|---|
+| **Cursor** | Cada fila tiene `rev`, un número global que crece en cada alta o cambio (secuencia + trigger). El celular guarda el último `rev` que vio y pide "lo que cambió después de N". |
+| **Primera vez** | `cursor = 0` → foto completa: datos maestros, adelantos y pagos, asistencia de los últimos 180 días más todo lo no pagado, últimos 400 movimientos. |
+| **Subir** | `POST /api/sync {cursor, ops}` en tandas de hasta 100: el servidor toma un candado (escrituras de a una), aplica cada operación en orden dentro de su propio *savepoint*, la registra en `ops_aplicadas` y devuelve el resultado de cada una más los cambios desde el cursor. |
+| **Sin duplicados** | Si se corta la señal justo después de subir, el celular reintenta: las operaciones ya aplicadas se reconocen por su `id` y no se repiten. |
+| **Bajas** | No se borra nada: faltas = jornales 0, adelantos/pagos anulados, stock 0, obreros/cuadrillas/herramientas inactivos. Así las bajas también viajan como cambios. |
+| **Cuándo** | Al hacer un cambio (medio segundo después), al volver la señal, al volver a la app y cada 45 s con la app abierta. Con reintentos crecientes si falla. |
+| **Sesión** | Token firmado (120 días) que se renueva solo al sincronizar. Sin señal la sesión sigue abierta. Si vence, se pide la clave **sin borrar** lo guardado ni la cola. |
+
+### 6.2 Operaciones
+
+| Operación | Datos | Rechazos posibles |
+|---|---|---|
+| `obrero.guardar` | id, nombre, rol, jornal, teléfono, nota, cuadrilla | cuadrilla inexistente |
+| `obrero.baja` / `obrero.alta` | id | obrero inexistente |
+| `cuadrilla.guardar` | id, nombre, obra, color, encargado | encargado inexistente |
+| `cuadrilla.integrantes` | id, obreros | cuadrilla cerrada |
+| `cuadrilla.cerrar` | id, fecha | — (devuelve herramientas, libera integrantes) |
+| `asistencia.marcar` | obrero, fecha, jornales (0 = falta), nota | día ya pagado |
+| `asistencia.lote` | fecha, [obrero, jornales] | (los días pagados se saltean) |
+| `adelanto.crear` | id, obrero, monto, fecha, nota | monto ≤ 0 |
+| `adelanto.borrar` | id | ya descontado en un pago |
+| `pago.crear` | id, corte, fecha, ítems (obrero, fechas, jornales, jornal, bruto, plus, descuento, neto) | días ya pagados o distintos, descuento mayor a la deuda, cuentas que no cierran |
+| `pago.anular` | id | — |
+| `herramienta.crear` | id, nombre, tipo, cantidad, valor, nota, cuadrilla destino | — |
+| `herramienta.editar` | id, nombre, tipo, valor, nota | — |
+| `herramienta.cantidad` | id, ±cantidad, motivo | quedaría menos que lo que está en obra |
+| `herramienta.borrar` | id | tiene unidades en obra |
+| `herramienta.mover` | desde, hacia, [herramienta, cantidad], nota | no alcanza en el origen |
+| `herramienta.reclamo` | herramienta, cuadrilla, tipo, cantidad, nota, cargo opcional | no alcanza |
 
 ---
 
-## 7. API (resumen)
+## 7. Modelo de datos (PostgreSQL)
 
-| Método | Ruta | Para qué |
-|---|---|---|
-| POST | `/api/auth/login` · `/api/auth/clave` | Ingresar · cambiar contraseña |
-| GET | `/api/estado` | Todo lo base de una vez: obreros (con deuda y pendiente), cuadrillas, herramientas, stock |
-| POST/PUT/DELETE | `/api/obreros[/:id]` | Alta, edición, baja |
-| GET | `/api/obreros/:id/cuenta` | Días sin pagar, adelantos (con estado), pagos |
-| POST/PUT/DELETE | `/api/cuadrillas[/:id]` | Alta, edición (encargado), cierre |
-| PUT | `/api/cuadrillas/:id/integrantes` | Definir integrantes |
-| GET/PUT | `/api/asistencia` | Rango de días · marcar un día (0 = falta) |
-| POST | `/api/asistencia/lote` | "Todos ✓" |
-| GET/POST/DELETE | `/api/adelantos` | Adelantos |
-| GET | `/api/pagos/preview?hasta=` | Cálculo del próximo pago |
-| GET/POST/DELETE | `/api/pagos[/:id]` | Historial · confirmar · anular |
-| POST/PUT/DELETE | `/api/herramientas[/:id]` | Inventario |
-| POST | `/api/herramientas/mover` | Entregar / devolver / trasladar (varias a la vez) |
-| POST | `/api/herramientas/reclamo` | Robo, faltante, rotura (+ cargo opcional) |
-| GET | `/api/herramientas/movimientos` | Historial |
+```
+usuarios           id, usuario, clave_hash (scrypt)
+cuadrillas         id uuid, nombre, obra, color, encargado_id → obreros, activa, rev
+obreros            id uuid, nombre, rol, jornal, telefono, nota, cuadrilla_id → cuadrillas, activo, rev
+asistencias        (obrero_id, fecha) PK, jornales (0 = falta), nota, pago_id → pagos, rev
+adelantos          id uuid, obrero_id, tipo (adelanto|cargo), monto, fecha, nota, movimiento_id, anulado, creado, rev
+pagos              id uuid, hasta (corte), fecha, totales, nota, anulado, rev
+pago_items         id uuid, pago_id, obrero_id, fechas date[], dias, jornales, jornal, bruto, plus, descuento, neto, nota, rev
+herramientas       id uuid, nombre, tipo (herramienta|maquina), cantidad (total), valor, nota, activo, rev
+herramienta_stock  (herramienta_id, cuadrilla_id) PK, cantidad          (pañol = total − Σ stock)
+movimientos        id uuid, herramienta_id, tipo, cantidad, desde_id, hacia_id, responsable_id, cargo, nota, fecha, rev
+ops_aplicadas      id uuid, tipo, ok, error, usuario_id, aplicada        (para no repetir operaciones)
+```
+
+- **Deuda** de un obrero = Σ adelantos no anulados − Σ descuentos de pagos no anulados.
+- **Pendiente** = asistencias con jornales > 0 y sin pago. *Le queda* = pendiente × jornal − deuda.
+- Fechas de calendario como `date` (sin zona horaria): el celular manda siempre `YYYY-MM-DD`.
 
 ---
 
 ## 8. Guía de interacción en el celular
 
 **Gestos**
-- Tocar el tilde → presente / falta. **Mantener apretado** → opciones de jornada.
-- Tocar el nombre → ficha rápida (saldo + adelanto).
+- Tocar el círculo → presente / falta. **Mantener apretado** → opciones de jornada.
+- Tocar el nombre → ficha (saldo + adelanto).
 - **Deslizar** la lista de Asistencia a los costados → día anterior / siguiente.
 - Arrastrar un panel hacia abajo o tocar *atrás* → se cierra.
 
 **Botón flotante** ("Adelanto", "Nuevo"…): se esconde mientras bajás por la lista para no
-tapar los tildes y vuelve al subir o al parar.
+tapar los círculos y vuelve al subir o al parar.
 
-**Animaciones** (cortas, con resorte, nunca bloquean):
-- Tilde: rebote + trazo que se dibuja; vibración corta en Android.
-- "Todos ✓": cascada de tildes.
-- Paneles que suben desde abajo; fondo que se oscurece.
-- Cambio de sección: fundido con desplazamiento corto. Cambio de día: deslizamiento
-  en la dirección del gesto.
-- Totales que "cuentan" hasta el nuevo valor. Listas que se reacomodan suavemente.
+**Animaciones** — hechas con CSS (sin librerías), con curvas tipo resorte:
+- Círculo: rebote + trazo del tilde que se dibuja; vibración corta en Android.
+- "Todos": cascada de tildes.
+- Paneles que suben desde abajo; fondo que se oscurece; se cierran arrastrando.
+- Cambio de sección: fundido corto. Cambio de día: deslizamiento según el gesto.
+- Totales que "cuentan" hasta el nuevo valor. Píldoras que se deslizan en las pestañas.
 - Avisos que bajan desde arriba con **Deshacer**.
-- Si el teléfono tiene activado "reducir movimiento", se respetan.
+- Si el teléfono tiene activado "reducir movimiento", se apagan.
 
-**Velocidad**
-- La app guarda una copia de los datos en el teléfono: abre al instante y después actualiza.
-- Los cambios se ven en pantalla antes de que responda el servidor; si algo falla, vuelve
-  atrás y avisa.
-- Asistencia sin señal: queda en cola en el teléfono y se sube sola. Si la sesión vence,
-  la cola se conserva y se sube al volver a entrar.
-- Si la app queda abierta de un día para otro, al volver a mirarla ya muestra el día nuevo
-  (y en Pagos, la semana nueva).
-- Instalable como app (PWA): "Agregar a pantalla de inicio".
+**Velocidad y peso**
+- Todo se lee del teléfono: no hay esperas ni cargas al tocar.
+- Frontend: sólo React + íconos; animaciones en CSS. Backend: un proceso Python.
+- Primera pantalla: ~100 KB comprimidos de JavaScript (React incluido). Lo que no se usa al
+  pasar lista (pagos, cuadrillas, herramientas, formularios) va aparte y se precarga apenas
+  aparece la primera pantalla, así nunca hay que esperar.
+- Respuestas comprimidas, archivos con caché larga, y la app guardada por el service worker.
+- La foto inicial de una empresa típica pesa ~6 KB comprimida; después sólo viajan cambios.
 
-**Lectura al sol**: tema claro de alto contraste por defecto (oscuro automático si el
-teléfono lo usa), números tabulares grandes, colores con significado fijo:
-verde = presente, ámbar = adelantos/deuda, rojo = faltas/reclamos, azul = jornada distinta de 1.
+**Lectura al sol**: tema claro de alto contraste (oscuro automático si el teléfono lo usa),
+números tabulares grandes, colores con significado fijo: verde = presente, ámbar =
+adelantos/deuda, rojo = faltas/reclamos, azul = jornada distinta de 1.
 
 ---
 
-## 9. Lo que pediste → dónde está
+## 9. Lo pedido → dónde está
 
 | Pedido | Funcionalidad |
 |---|---|
@@ -309,11 +362,15 @@ verde = presente, ámbar = adelantos/deuda, rojo = faltas/reclamos, azul = jorna
 | Cada uno tiene su sueldo y a veces pagamos un poco más | Jornal individual + **Plus** en el pago |
 | Medio día más o doble jornada | Jornada ½ · 1 · 1½ · 2 (F2) |
 | Anotar adelantos | Adelanto desde Asistencia, ficha o botón flotante (F3) |
-| Cuánto le queda a cada uno al tomar asistencia y si tuvo adelanto | "lleva / adel. / le queda" en cada fila (F4) |
-| Descontar el adelanto el día de pago o dejarlo para otro pago | Interruptor y monto parcial por obrero (F5, R4) |
+| Cuánto le queda a cada uno al tomar asistencia y si tuvo adelanto | "adel. / le queda" en cada fila (F4) |
+| Descontar el adelanto el día de pago o dejarlo para otro pago | Todo / una parte / después, por obrero (F5, R4) |
 | Saber cuánto es el total a pagar | Total a pagar + resumen al confirmar (F5) |
 | Inventario de herramientas y máquinas | Herramientas (F8) |
 | Repartir herramientas por obra / cuadrilla | Entregar, devolver, mover (F6) |
 | Encargado que da la cara si se roban, faltan o rompen | Encargado por cuadrilla + reclamos a su nombre + cargo opcional (F7, R8) |
 | Dividir obreros por cuadrilla (ej. Plaza Funes, 4 personas + encargado) | Cuadrillas (F10) |
 | Muy funcional en el celular, rápido, simple, con animaciones | §8 |
+| Python, PostgreSQL y React | FastAPI + asyncpg + PostgreSQL; React (§6, §7) |
+| Lo más rápido y liviano posible | Datos locales, sin librerías pesadas, un solo servicio (§6, §8) |
+| App descargable | PWA instalable (F12) |
+| Usarla sin internet | Todo funciona sin señal y se sincroniza solo (F11, §6.1) |

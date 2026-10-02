@@ -1,8 +1,8 @@
 // Detalle de un pago hecho: recibo por obrero (WhatsApp), compartir y anular.
-import { useEffect, useState } from 'react';
 import { MessageCircle, Share2, Undo2 } from 'lucide-react';
-import { anularPago, detallePago } from '../../lib/acciones';
+import { anularPago } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
+import { useDetallePago } from '../../lib/consultas';
 import { conDia, rango, semanaDePago } from '../../lib/fechas';
 import { jornales, mas, menos, pesos, whatsapp } from '../../lib/formato';
 import { abrir } from '../../lib/hojas';
@@ -10,17 +10,7 @@ import { compartir, reciboObrero, resumenPago } from '../../lib/resumen';
 import Hoja from '../../ui/Hoja';
 
 export default function HojaDetallePago({ pagoId }) {
-  const [pago, setPago] = useState(null);
-
-  useEffect(() => {
-    let vivo = true;
-    detallePago(pagoId)
-      .then((p) => vivo && setPago(p))
-      .catch(avisarError);
-    return () => {
-      vivo = false;
-    };
-  }, [pagoId]);
+  const pago = useDetallePago(pagoId);
 
   async function compartirResumen() {
     try {
@@ -42,8 +32,8 @@ export default function HojaDetallePago({ pagoId }) {
       ),
       confirmar: 'Anular pago',
       peligro: true,
-      onConfirmar: async () => {
-        await anularPago(pago.id);
+      onConfirmar: () => {
+        anularPago(pago.id);
         avisar('Pago anulado');
         return 2;
       },
@@ -56,7 +46,8 @@ export default function HojaDetallePago({ pagoId }) {
       titulo={pago ? `Pago del ${conDia(pago.fecha)}` : 'Pago'}
       subtitulo={pago ? `Semana ${rango(semanaDePago(pago.hasta))}` : ''}
       pie={
-        pago && (
+        pago &&
+        !pago.anulado && (
           <div className="flex gap-2">
             <button type="button" className="btn btn-peligro px-4" onClick={anular}>
               <Undo2 size={18} /> Anular
@@ -69,11 +60,7 @@ export default function HojaDetallePago({ pagoId }) {
       }
     >
       {!pago ? (
-        <div className="space-y-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="esqueleto h-14" />
-          ))}
-        </div>
+        <p className="py-10 text-center text-tinta-3">Este pago ya no existe.</p>
       ) : (
         <>
           <div className="rounded-3xl bg-superficie-2 p-4">

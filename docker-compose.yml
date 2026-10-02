@@ -1,45 +1,49 @@
+# docker compose up -d --build   (antes: cp .env.example .env y completarlo)
 services:
-
   db:
-    image: mysql:8.0
-    restart: always
+    image: postgres:17-alpine
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
+      POSTGRES_DB: etem
+      POSTGRES_USER: etem
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD en .env}
       TZ: America/Argentina/Buenos_Aires
     volumes:
-      - db_data:/var/lib/mysql
+      - datos:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U etem -d etem"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
-  backend:
-    build: ./backend
-    restart: always
+  app:
+    build: .
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      PORT: 3001
-      DB_HOST: db
-      DB_USER: root
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      JWT_SECRET: ${JWT_SECRET}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      APP_TZ: America/Argentina/Buenos_Aires
-      TZ: America/Argentina/Buenos_Aires
+      DATABASE_URL: postgresql://etem:${DB_PASSWORD}@db:5432/etem
+      SECRETO: ${SECRETO:?Falta SECRETO en .env}
+      ADMIN_CLAVE: ${ADMIN_CLAVE:?Falta ADMIN_CLAVE en .env}
 
-  frontend:
-    build: ./frontend
-    restart: always
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
     ports:
       - "80:80"
-    depends_on:
-      - backend
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMINIO: ${DOMINIO:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
 
 volumes:
-  db_data:
+  datos:
+  caddy_datos:
+  caddy_config:

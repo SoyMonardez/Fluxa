@@ -1,334 +1,232 @@
-// Todo lo que cambia datos pasa por acá. Los cambios se ven en pantalla al instante
-// y, si el servidor rechaza algo, se vuelve atrás y se avisa.
-import { del, get, guardarToken, post, put, alVencerSesion } from './api';
-import { avisar } from './avisos';
-import { encolar, largoCola, marcasEnCola, sacar, vaciarCola } from './cola';
+// Todo lo que cambia datos pasa por acá. Cada acción se aplica al instante en el
+// teléfono (con o sin señal) y el motor la sube sola. Si una regla no se cumple
+// (ej. un día ya pagado) la acción tira el error para mostrarlo y no cambia nada.
+import { elegirAlmacen } from '../motor/almacen';
+import { crearVista, detallePago } from '../motor/derivar';
+import { crearMotor } from '../motor/motor';
+import { nuevoId } from '../motor/uuid';
+import { alVencerSesion, guardarToken, guardarUsuario, post, sincronizar } from './api';
+import { avisar, avisarError } from './avisos';
+import { hoy } from './fechas';
 import { cerrarTodo } from './hojas';
-import { borrarCache, getEstado, guardarUsuario, setEstado, upsert } from './store';
-import { diasDesde } from './fechas';
+import { getEstado, setEstado } from './store';
 
-/* ── Sesión ─────────────────────────────────────────────────────────── */
+/* ── Motor ──────────────────────────────────────────────────────────── */
 
-// Al entrar, Shell carga los datos (y sube la asistencia que haya quedado en cola).
-export async function ingresar(usuario, clave) {
-  const r = await post('/auth/login', { username: usuario, password: clave });
-  guardarToken(r.token);
-  guardarUsuario(r.username);
-  setEstado({ sesion: { usuario: r.username } });
+// IndexedDB se abre una sola vez; mientras tanto el motor espera.
+const almacenListo = elegirAlmacen();
+const almacen = {
+  leerTodo: async () => (await almacenListo).leerTodo(),
+  agregarOps: async (ops) => (await almacenListo).agregarOps(ops),
+  guardarSync: async (x) => (await almacenListo).guardarSync(x),
+  borrarTodo: async () => (await almacenListo).borrarTodo(),
+};
+
+function sesionVencida() {
+  if (getEstado().sesion && !getEstado().sesionVencida) setEstado({ sesionVencida: true });
 }
 
-/** conservarCola: si la sesión venció, la asistencia sin subir se guarda para después de volver a entrar. */
-export function salir({ conservarCola = false } = {}) {
-  guardarToken(null);
-  borrarCache();
-  if (!conservarCola) vaciarCola();
-  cerrarTodo();
-  setEstado({ sesion: null, listo: false, obreros: [], cuadrillas: [], herramientas: [], stock: [], asistencia: {}, cola: 0 });
-}
-
-alVencerSesion(() => {
-  if (getEstado().sesion) {
-    salir({ conservarCola: true });
-    avisar('La sesión venció. Volvé a ingresar.', { tipo: 'error' });
-  }
+const motor = crearMotor({
+  almacen,
+  red: { sincronizar },
+  avisos: {
+    rechazos(lista) {
+      for (const { error } of lista.slice(0, 3)) avisar(`No se guardó: ${error}`, { tipo: 'error', duracion: 8000 });
+      if (lista.length > 3) avisar(`Y ${lista.length - 3} cambios más no se pudieron guardar.`, { tipo: 'error', duracion: 8000 });
+    },
+    subidos: (n) => avisar(n === 1 ? 'Se subió el cambio hecho sin señal ✓' : `Se subieron los ${n} cambios hechos sin señal ✓`),
+    sesionVencida,
+  },
 });
+alVencerSesion(sesionVencida);
 
-export const cambiarClave = (actual, nueva) => post('/auth/clave', { actual, nueva });
+const vista = crearVista();
+motor.suscribir((e) =>
+  setEstado({
+    ...vista(e.tablas),
+    cargado: e.cargado,
+    listo: e.listo,
+    pendientes: e.pendientes,
+    red: e.red,
+    errorRed: e.error,
+    ultimaSync: e.ultima,
+  })
+);
 
-/* ── Carga ──────────────────────────────────────────────────────────── */
-
-export async function cargarEstado() {
-  const d = await get('/estado');
-  setEstado({ obreros: d.obreros, cuadrillas: d.cuadrillas, herramientas: d.herramientas, stock: d.stock, listo: true });
-}
-
-const rangosCargados = new Map(); // 'desde|hasta' → ms
-
-export async function cargarAsistencia(desde, hasta, { forzar = false } = {}) {
-  const k = `${desde}|${hasta}`;
-  if (!forzar && Date.now() - (rangosCargados.get(k) || 0) < 20_000) return;
-  rangosCargados.set(k, Date.now());
-  const filas = await get(`/asistencia?desde=${desde}&hasta=${hasta}`);
-  setEstado((s) => {
-    const asistencia = { ...s.asistencia };
-    const n = Math.round((new Date(hasta) - new Date(desde)) / 86_400_000) + 1;
-    for (const f of diasDesde(desde, n)) asistencia[f] = {};
-    for (const r of filas) asistencia[r.fecha][r.obrero_id] = { jornales: r.jornales, nota: r.nota, pagado: r.pagado };
-    // Lo que todavía está en la cola manda sobre lo del servidor.
-    for (const m of marcasEnCola()) {
-      if (!asistencia[m.fecha]) continue;
-      if (m.jornales) asistencia[m.fecha][m.obrero_id] = { jornales: m.jornales, nota: m.nota ?? '', pagado: false };
-      else delete asistencia[m.fecha][m.obrero_id];
-    }
-    return { asistencia };
-  });
-}
-
-export function invalidarAsistencia() {
-  rangosCargados.clear();
-  setEstado((s) => ({ version: s.version + 1 }));
-}
-
-export async function iniciar() {
-  setEstado({ cola: largoCola() });
-  await subirCola();
-  await cargarEstado();
-}
-
-/* ── Asistencia ─────────────────────────────────────────────────────── */
-
-// Aplica un día en pantalla y ajusta lo pendiente de cobro del obrero.
-function aplicarDia(obreroId, fecha, nuevo) {
-  setEstado((s) => {
-    const dia = { ...(s.asistencia[fecha] || {}) };
-    const previo = dia[obreroId];
-    if (nuevo) dia[obreroId] = nuevo;
-    else delete dia[obreroId];
-    const antes = previo && !previo.pagado ? previo.jornales : 0;
-    const despues = nuevo && !nuevo.pagado ? nuevo.jornales : 0;
-    const obreros =
-      antes === despues
-        ? s.obreros
-        : s.obreros.map((o) =>
-            o.id === obreroId
-              ? {
-                  ...o,
-                  pend_jornales: Math.max(0, Math.round((o.pend_jornales + despues - antes) * 10) / 10),
-                  pend_dias: Math.max(0, o.pend_dias + (despues > 0) - (antes > 0)),
-                }
-              : o
-          );
-    return { asistencia: { ...s.asistencia, [fecha]: dia }, obreros };
-  });
-}
-
-// Las marcas de un mismo obrero y día se mandan en orden (dos toques rápidos no se pisan).
-const cadenas = new Map();
-const secuencia = new Map();
-function enOrden(clave, fn) {
-  const p = (cadenas.get(clave) || Promise.resolve()).catch(() => {}).then(fn);
-  cadenas.set(clave, p);
-  return p;
-}
-
-const DIA_PAGADO = 'Ese día ya está pagado. Para cambiarlo, anulá el pago en Pagos → Historial.';
-
-/** jornales: 0 (falta), 0.5, 1, 1.5 o 2. nota: undefined = no tocarla. */
-export async function marcar(obreroId, fecha, jornales, nota) {
-  const previo = getEstado().asistencia[fecha]?.[obreroId] || null;
-  if (previo?.pagado) {
-    avisar(DIA_PAGADO, { tipo: 'error' });
-    return false;
-  }
-  const clave = `${obreroId}|${fecha}`;
-  const n = (secuencia.get(clave) || 0) + 1;
-  secuencia.set(clave, n);
-  const marca = { obrero_id: obreroId, fecha, jornales, ...(nota !== undefined ? { nota } : {}) };
-  aplicarDia(obreroId, fecha, jornales ? { jornales, nota: nota ?? previo?.nota ?? '', pagado: false } : null);
-
-  if (!navigator.onLine) {
-    setEstado({ cola: encolar(marca) });
-    return true;
-  }
-  setEstado({ cola: sacar(marca) });
-  try {
-    await enOrden(clave, () => put('/asistencia', marca));
-    return true;
-  } catch (e) {
-    if (e.sinRed) {
-      setEstado({ cola: encolar(marca) });
-      return true;
-    }
-    if (secuencia.get(clave) === n) aplicarDia(obreroId, fecha, e.datos?.registro ?? previo);
-    avisar(e.message, { tipo: 'error' });
-    return false;
-  }
-}
-
-/**
- * Marca varios a la vez. items: [{ obrero_id, jornales }].
- * Devuelve los valores anteriores para poder deshacer.
- */
-export async function marcarVarios(fecha, items) {
-  const dia = getEstado().asistencia[fecha] || {};
-  const libres = items.filter((it) => !dia[it.obrero_id]?.pagado);
-  const previos = libres.map((it) => ({ obrero_id: it.obrero_id, jornales: dia[it.obrero_id]?.jornales ?? 0 }));
-  for (const it of libres) {
-    aplicarDia(it.obrero_id, fecha, it.jornales ? { jornales: it.jornales, nota: dia[it.obrero_id]?.nota ?? '', pagado: false } : null);
-  }
-  if (!libres.length) return previos;
-  const aCola = () => {
-    let largo = 0;
-    for (const it of libres) largo = encolar({ obrero_id: it.obrero_id, fecha, jornales: it.jornales });
-    setEstado({ cola: largo });
-  };
-  if (!navigator.onLine) {
-    aCola();
-    return previos;
-  }
-  try {
-    for (const it of libres) sacar({ obrero_id: it.obrero_id, fecha });
-    setEstado({ cola: largoCola() });
-    await post('/asistencia/lote', { fecha, items: libres });
-  } catch (e) {
-    if (e.sinRed) aCola();
-    else {
-      for (const p of previos) aplicarDia(p.obrero_id, fecha, p.jornales ? { ...dia[p.obrero_id] } : null);
-      avisar(e.message, { tipo: 'error' });
-    }
-  }
-  return previos;
-}
-
-let subiendo = false;
-export async function subirCola() {
-  if (subiendo || !navigator.onLine) return;
-  const marcas = marcasEnCola();
-  if (!marcas.length) return;
-  subiendo = true;
-  let rechazadas = 0;
-  try {
-    for (const m of marcas) {
-      try {
-        await put('/asistencia', m);
-        sacar(m);
-      } catch (e) {
-        if (e.sinRed || e.status === 401) break;
-        sacar(m);
-        rechazadas += 1;
-      }
-    }
-  } finally {
-    subiendo = false;
-    const quedan = largoCola();
-    setEstado({ cola: quedan });
-    if (!quedan) {
-      avisar(rechazadas ? `Asistencia subida. ${rechazadas} marca(s) no se pudieron guardar (día pagado).` : 'Asistencia sin señal subida ✓', {
-        tipo: rechazadas ? 'error' : 'ok',
-      });
-      invalidarAsistencia();
-      cargarEstado().catch(() => {});
-    }
-  }
-}
+if (getEstado().sesion) motor.arrancar();
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     setEstado({ enLinea: true });
-    subirCola();
+    motor.sincronizar();
   });
   window.addEventListener('offline', () => setEstado({ enLinea: false }));
+  // Al volver a la app (o cada tanto mientras está abierta) se baja lo que hicieron otros.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - (getEstado().ultimaSync ?? 0) > 15_000) motor.sincronizar();
+  });
   setInterval(() => {
-    if (largoCola()) subirCola();
-  }, 30_000);
+    if (document.visibilityState === 'visible') motor.sincronizar();
+  }, 45_000);
 }
 
-/* ── Obreros ────────────────────────────────────────────────────────── */
+export const sincronizarAhora = () => motor.sincronizar();
+export const tablas = () => motor.tablas();
 
-export const actualizarObrero = (id, cambios) =>
-  setEstado((s) => ({ obreros: s.obreros.map((o) => (o.id === id ? { ...o, ...cambios } : o)) }));
+const hacer = (tipo, datos) => motor.ejecutar(tipo, datos);
+const texto = (s) => String(s ?? '').trim();
 
-function aplicarObrero(r) {
-  setEstado((s) => ({ obreros: upsert(s.obreros, r.obrero), cuadrillas: r.cuadrillas }));
-  return r.obrero;
+/* ── Sesión ─────────────────────────────────────────────────────────── */
+
+export async function ingresar(usuario, clave) {
+  const r = await post('/auth/login', { usuario, clave });
+  guardarToken(r.token);
+  guardarUsuario(r.usuario);
+  setEstado({ sesion: { usuario: r.usuario }, sesionVencida: false });
+  // Si la sesión había vencido, sigue con la cola donde estaba.
+  motor.reanudar();
 }
 
-export const guardarObrero = async (datos, id) =>
-  aplicarObrero(id ? await put(`/obreros/${id}`, datos) : await post('/obreros', datos));
-export const darDeBaja = async (id) => aplicarObrero(await del(`/obreros/${id}`));
-export const reactivar = async (id) => aplicarObrero(await post(`/obreros/${id}/alta`));
-export const cuentaDe = (id) => get(`/obreros/${id}/cuenta`);
-
-/* ── Adelantos ──────────────────────────────────────────────────────── */
-
-export async function darAdelanto(obreroId, monto, fecha, nota = '') {
-  const r = await post('/adelantos', { obrero_id: obreroId, monto, fecha, nota });
-  actualizarObrero(obreroId, { deuda: r.deuda });
-  return r.adelanto;
+/** Borra lo guardado en el teléfono (también lo que no se subió: HojaMenu avisa antes). */
+export async function salir() {
+  guardarToken(null);
+  cerrarTodo();
+  setEstado({ sesion: null, sesionVencida: false });
+  await motor.reiniciar();
 }
 
-export async function borrarAdelanto(id) {
-  const r = await del(`/adelantos/${id}`);
-  actualizarObrero(r.obrero_id, { deuda: r.deuda });
-  return r;
+export async function cambiarClave(actual, nueva) {
+  const r = await post('/auth/clave', { actual, nueva });
+  if (r?.token) guardarToken(r.token);
 }
+
+/* ── Asistencia ─────────────────────────────────────────────────────── */
+
+/** jornales: 0 (falta), 0.5, 1, 1.5 o 2. nota: undefined = no tocarla. Avisa si no se puede. */
+export function marcar(obreroId, fecha, jornales, nota) {
+  try {
+    hacer('asistencia.marcar', { obrero_id: obreroId, fecha, jornales, ...(nota !== undefined ? { nota: texto(nota) } : {}) });
+    return true;
+  } catch (e) {
+    avisarError(e);
+    return false;
+  }
+}
+
+/** Marca varios a la vez (salteando días pagados). Devuelve lo anterior para poder deshacer. */
+export function marcarVarios(fecha, items) {
+  const dia = getEstado().asistencia[fecha] || {};
+  const libres = items.filter((it) => !dia[it.obrero_id]?.pagado);
+  const previos = libres.map((it) => ({ obrero_id: it.obrero_id, jornales: dia[it.obrero_id]?.jornales ?? 0 }));
+  if (!libres.length) return previos;
+  try {
+    hacer('asistencia.lote', { fecha, items: libres });
+  } catch (e) {
+    avisarError(e);
+  }
+  return previos;
+}
+
+/* ── Obreros y adelantos ────────────────────────────────────────────── */
+
+export function guardarObrero(d, id = null) {
+  const oid = id ?? nuevoId();
+  hacer('obrero.guardar', {
+    id: oid,
+    nombre: texto(d.nombre),
+    rol: texto(d.rol),
+    jornal: d.jornal,
+    telefono: texto(d.telefono),
+    nota: texto(d.nota),
+    cuadrilla_id: d.cuadrilla_id ?? null,
+  });
+  return motor.tablas().obreros.get(oid);
+}
+
+export const darDeBaja = (id) => hacer('obrero.baja', { id });
+export const reactivar = (id) => hacer('obrero.alta', { id });
+
+export function darAdelanto(obreroId, monto, fecha, nota = '') {
+  const id = nuevoId();
+  hacer('adelanto.crear', { id, obrero_id: obreroId, monto, fecha, nota: texto(nota) });
+  return { id };
+}
+
+export const borrarAdelanto = (id) => hacer('adelanto.borrar', { id });
 
 /* ── Cuadrillas ─────────────────────────────────────────────────────── */
 
-function aplicarEquipos(r) {
-  const cuadrillaDe = new Map(r.asignaciones.map((a) => [a.id, a.cuadrilla_id]));
-  setEstado((s) => ({
-    cuadrillas: r.cuadrillas,
-    obreros: s.obreros.map((o) => (cuadrillaDe.has(o.id) && cuadrillaDe.get(o.id) !== o.cuadrilla_id ? { ...o, cuadrilla_id: cuadrillaDe.get(o.id) } : o)),
-    ...(r.stock ? { stock: r.stock } : {}),
-  }));
-  return r;
+/** Crea o edita; devuelve el id. */
+export function guardarCuadrilla(d, id = null) {
+  const cid = id ?? nuevoId();
+  hacer('cuadrilla.guardar', { id: cid, nombre: texto(d.nombre), obra: texto(d.obra), color: d.color, encargado_id: d.encargado_id ?? null });
+  return cid;
 }
 
-export async function guardarCuadrilla(datos, id) {
-  const r = aplicarEquipos(id ? await put(`/cuadrillas/${id}`, datos) : await post('/cuadrillas', datos));
-  return id ?? r.id;
-}
-export const definirIntegrantes = async (id, obreroIds) => aplicarEquipos(await put(`/cuadrillas/${id}/integrantes`, { obrero_ids: obreroIds }));
-export const cerrarCuadrilla = async (id) => aplicarEquipos(await del(`/cuadrillas/${id}`));
+export const definirIntegrantes = (id, obreroIds) => hacer('cuadrilla.integrantes', { id, obrero_ids: obreroIds });
+export const cerrarCuadrilla = (id) => hacer('cuadrilla.cerrar', { id, fecha: hoy() });
 
 /* ── Herramientas ───────────────────────────────────────────────────── */
 
-function aplicarHerramientas(r) {
-  const ids = new Set(r.herramienta_ids);
-  setEstado((s) => {
-    let herramientas = s.herramientas;
-    for (const h of r.herramientas) if (h) herramientas = upsert(herramientas, h);
-    herramientas = [...herramientas].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-    const stock = [...s.stock.filter((x) => !ids.has(x.herramienta_id)), ...r.stock];
-    return { herramientas, stock };
-  });
-  if (r.obrero) setEstado((s) => ({ obreros: upsert(s.obreros, r.obrero) }));
-  return r;
+/** Alta (con cuadrilla_id opcional: se entrega ahí) o edición (si cambia la cantidad, se ajusta). */
+export function guardarHerramienta(d, id = null) {
+  const datos = { nombre: texto(d.nombre), tipo: d.tipo, valor: d.valor || 0, nota: texto(d.nota) };
+  if (!id) {
+    const hid = nuevoId();
+    hacer('herramienta.crear', { id: hid, ...datos, cantidad: d.cantidad, cuadrilla_id: d.cuadrilla_id ?? null, fecha: hoy() });
+    return motor.tablas().herramientas.get(hid);
+  }
+  const delta = d.cantidad - motor.tablas().herramientas.get(id).cantidad;
+  motor.ejecutarVarias([
+    ['herramienta.editar', { id, ...datos }],
+    ...(delta ? [['herramienta.cantidad', { id, delta, motivo: delta > 0 ? 'Alta' : 'Corrección', fecha: hoy() }]] : []),
+  ]);
+  return motor.tablas().herramientas.get(id);
 }
 
-export async function guardarHerramienta(datos, id) {
-  const r = aplicarHerramientas(id ? await put(`/herramientas/${id}`, datos) : await post('/herramientas', datos));
-  return r.herramientas[0];
-}
-
-export async function borrarHerramienta(id) {
-  await del(`/herramientas/${id}`);
-  setEstado((s) => ({ herramientas: s.herramientas.filter((h) => h.id !== id), stock: s.stock.filter((x) => x.herramienta_id !== id) }));
-}
+export const sumarUnidades = (id, n, motivo) => hacer('herramienta.cantidad', { id, delta: n, motivo, fecha: hoy() });
+export const borrarHerramienta = (id) => hacer('herramienta.borrar', { id });
 
 /** desde/hacia: id de cuadrilla o null (pañol). items: [{ herramienta_id, cantidad }] */
-export const moverHerramientas = async (desde, hacia, items, nota = '') =>
-  aplicarHerramientas(await post('/herramientas/mover', { desde, hacia, items, nota }));
+export const moverHerramientas = (desde, hacia, items, nota = '') => hacer('herramienta.mover', { desde, hacia, items, nota: texto(nota), fecha: hoy() });
 
-export const registrarReclamo = async (datos) => aplicarHerramientas(await post('/herramientas/reclamo', datos));
-
-export function movimientos({ herramientaId, cuadrillaId, limite = 40 } = {}) {
-  const q = new URLSearchParams({ limite: String(limite) });
-  if (herramientaId) q.set('herramienta_id', herramientaId);
-  if (cuadrillaId) q.set('cuadrilla_id', cuadrillaId);
-  return get(`/herramientas/movimientos?${q}`);
+/** cargo: { obrero_id, monto } o null — se cobra como un adelanto. */
+export function registrarReclamo(d) {
+  hacer('herramienta.reclamo', {
+    herramienta_id: d.herramienta_id,
+    cuadrilla_id: d.cuadrilla_id ?? null,
+    tipo: d.tipo,
+    cantidad: d.cantidad,
+    nota: texto(d.nota),
+    fecha: d.fecha ?? hoy(),
+    cargo: d.cargo ? { adelanto_id: nuevoId(), obrero_id: d.cargo.obrero_id, monto: d.cargo.monto } : null,
+  });
 }
 
 /* ── Pagos ──────────────────────────────────────────────────────────── */
 
-export const previewPago = (hasta) => get(`/pagos/preview?hasta=${hasta}`);
-export const listaPagos = () => get('/pagos');
-export const detallePago = (id) => get(`/pagos/${id}`);
-
-async function trasPago() {
-  invalidarAsistencia();
-  await cargarEstado();
+/** items: los del próximo pago (con sus asistencias, descuento y plus). Devuelve el pago registrado. */
+export function pagar({ hasta, fecha, nota, items }) {
+  const id = nuevoId();
+  hacer('pago.crear', {
+    id,
+    hasta,
+    fecha,
+    nota: texto(nota),
+    items: items.map((i) => ({
+      id: nuevoId(),
+      obrero_id: i.obrero_id,
+      fechas: i.asistencias.map((a) => a.fecha),
+      jornales: i.jornales,
+      jornal: i.jornal,
+      bruto: i.bruto,
+      plus: i.plus,
+      descuento: i.descuento,
+      neto: i.neto,
+      nota: texto(i.nota),
+    })),
+  });
+  return detallePago(motor.tablas(), id);
 }
 
-export async function pagar(datos) {
-  const r = await post('/pagos', datos);
-  await trasPago();
-  return r;
-}
-
-export async function anularPago(id) {
-  await del(`/pagos/${id}`);
-  await trasPago();
-}
-
+export const anularPago = (id) => hacer('pago.anular', { id });

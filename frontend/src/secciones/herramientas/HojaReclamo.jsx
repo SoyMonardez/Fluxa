@@ -35,7 +35,6 @@ export default function HojaReclamo({ herramientaId, cuadrillaId = null, elegirL
   const [cobrar, setCobrar] = useState(false);
   const [aQuien, setAQuien] = useState(null);
   const [monto, setMonto] = useState(null);
-  const [enviando, setEnviando] = useState(false);
 
   if (!h) return <Hoja titulo="Reclamo" />;
 
@@ -47,10 +46,9 @@ export default function HojaReclamo({ herramientaId, cuadrillaId = null, elegirL
   const cobrado = obreros.find((o) => o.id === (aQuien ?? encargado?.id));
   const montoFinal = monto ?? h.valor * n;
 
-  async function registrar() {
-    setEnviando(true);
+  function registrar() {
     try {
-      await registrarReclamo({
+      registrarReclamo({
         herramienta_id: h.id,
         cuadrilla_id: lugar,
         tipo,
@@ -69,7 +67,6 @@ export default function HojaReclamo({ herramientaId, cuadrillaId = null, elegirL
       cerrar();
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -78,7 +75,7 @@ export default function HojaReclamo({ herramientaId, cuadrillaId = null, elegirL
       titulo={`Reclamo · ${h.nombre}`}
       subtitulo="Las unidades se dan de baja del inventario"
       pie={
-        <button type="button" className="btn w-full bg-mal text-white" disabled={!hay || enviando} onClick={registrar}>
+        <button type="button" className="btn w-full bg-mal text-white" disabled={!hay} onClick={registrar}>
           <ShieldAlert size={19} /> Registrar reclamo
         </button>
       }

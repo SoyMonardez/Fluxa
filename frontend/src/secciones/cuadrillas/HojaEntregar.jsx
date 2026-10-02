@@ -1,6 +1,5 @@
 // F6: entregar varias herramientas del pañol a una cuadrilla de una sola vez.
 import { useMemo, useState } from 'react';
-import { m } from 'motion/react';
 import { PackagePlus, Plus, Truck, Wrench } from 'lucide-react';
 import { moverHerramientas } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
@@ -18,7 +17,6 @@ export default function HojaEntregar({ cuadrillaId }) {
   const stock = useEstado((s) => s.stock);
   const [elegidas, setElegidas] = useState({});
   const [texto, setTexto] = useState('');
-  const [enviando, setEnviando] = useState(false);
 
   const disponibles = useMemo(() => {
     const porH = stockPorHerramienta(stock);
@@ -31,19 +29,17 @@ export default function HojaEntregar({ cuadrillaId }) {
 
   const poner = (id, n) => setElegidas((x) => ({ ...x, [id]: n }));
 
-  async function entregar() {
+  function entregar() {
     const items = Object.entries(elegidas)
       .filter(([, n]) => n > 0)
-      .map(([id, n]) => ({ herramienta_id: Number(id), cantidad: n }));
-    setEnviando(true);
+      .map(([id, n]) => ({ herramienta_id: id, cantidad: n }));
     try {
-      await moverHerramientas(null, c.id, items);
+      moverHerramientas(null, c.id, items);
       vibrar(14);
       avisar(`Entregaste ${total} herramienta${total === 1 ? '' : 's'} a ${c.nombre}${encargado ? ` (responde ${encargado.nombre})` : ''}`);
       cerrar();
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -53,7 +49,7 @@ export default function HojaEntregar({ cuadrillaId }) {
       titulo={`Entregar a ${c.nombre}`}
       subtitulo={encargado ? `Queda a cargo de ${encargado.nombre}` : 'Ojo: esta cuadrilla no tiene encargado'}
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={!total || enviando} onClick={entregar}>
+        <button type="button" className="btn btn-primario w-full" disabled={!total} onClick={entregar}>
           <PackagePlus size={19} /> {total ? `Entregar ${total} herramienta${total === 1 ? '' : 's'}` : 'Elegí qué se lleva'}
         </button>
       }
@@ -80,13 +76,12 @@ export default function HojaEntregar({ cuadrillaId }) {
             return (
               <li key={h.id} className="flex items-center gap-3 py-2">
                 <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => n < hay && poner(h.id, n + 1)}>
-                  <m.span
-                    animate={{ scale: n ? [1, 1.15, 1] : 1 }}
+                  <span
                     key={n}
-                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${n ? 'bg-ok-suave text-ok' : 'bg-superficie-2 text-tinta-2'}`}
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors ${n ? 'animar-latido bg-ok-suave text-ok' : 'bg-superficie-2 text-tinta-2'}`}
                   >
                     {h.tipo === 'maquina' ? <Truck size={18} /> : <Wrench size={18} />}
-                  </m.span>
+                  </span>
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{h.nombre}</span>
                     <span className="num block text-xs text-tinta-3">hay {hay} en el pañol</span>

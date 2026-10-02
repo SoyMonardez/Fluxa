@@ -1,6 +1,5 @@
 // P6/P10: cada cuadrilla (obra) con su gente, su encargado y sus herramientas.
 import { useMemo } from 'react';
-import { m } from 'motion/react';
 import { ChevronRight, HardHat, KeyRound, Plus, TriangleAlert, Warehouse, Wrench } from 'lucide-react';
 import { enObras, stockPorCuadrilla, stockPorHerramienta } from '../../lib/derivados';
 import { colorDe, plural } from '../../lib/formato';
@@ -42,15 +41,12 @@ export default function Cuadrillas() {
               const encargado = miembros.find((o) => o.id === c.encargado_id);
               const unidades = (porCuadrilla.get(c.id) ?? []).reduce((s, x) => s + x.cantidad, 0);
               return (
-                <m.button
+                <button
                   key={c.id}
                   type="button"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  whileTap={{ scale: 0.98 }}
+                  style={{ animationDelay: `${i * 0.04}s` }}
                   onClick={() => abrir('cuadrilla', { cuadrillaId: c.id })}
-                  className="tarjeta relative block w-full overflow-hidden p-4 pl-5 text-left"
+                  className="tarjeta animar-subir relative block w-full overflow-hidden p-4 pl-5 text-left transition-transform active:scale-[0.98]"
                 >
                   <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: colorDe(c.color) }} />
                   <div className="flex items-start gap-3">
@@ -93,7 +89,7 @@ export default function Cuadrillas() {
                       </span>
                     </div>
                   </div>
-                </m.button>
+                </button>
               );
             })}
           </div>

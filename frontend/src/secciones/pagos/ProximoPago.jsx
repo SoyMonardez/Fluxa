@@ -1,16 +1,14 @@
 // Cálculo del próximo pago: por obrero, días × jornal, descuento de adelantos
 // (todo, nada o una parte) y plus. Abajo, el total y el botón para pagar.
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, CircleAlert, PartyPopper } from 'lucide-react';
-import { previewPago } from '../../lib/acciones';
-import { avisarError } from '../../lib/avisos';
+import { usePreviewPago } from '../../lib/consultas';
 import { conDia, corta, nombreDia, rango, semanaDePago, sumarDias } from '../../lib/fechas';
 import { useHoy } from '../../lib/useHoy';
 import { jornales, mas, menos, pesos } from '../../lib/formato';
 import { abrir } from '../../lib/hojas';
 import { useEstado } from '../../lib/store';
 import { Numero, Vacio } from '../../ui/campos';
-import { Esqueleto } from '../../ui/pagina';
 import ItemPago from './ItemPago';
 
 const suma = (lista, k) => lista.reduce((s, x) => s + (Number(x[k]) || 0), 0);
@@ -21,35 +19,21 @@ export default function ProximoPago() {
   const [elegido, setElegido] = useState(null);
   const hasta = elegido ?? corteActual;
   const setHasta = (f) => setElegido(f === corteActual ? null : f);
-  const [datos, setDatos] = useState(null);
-  const [ajustes, setAjustes] = useState({ clave: null, v: {} });
+  const [ajustes, setAjustes] = useState({ hasta: null, pagos: null, v: {} });
   const [abierto, setAbierto] = useState(null);
-  const version = useEstado((s) => s.version);
-  const deudaVersion = useEstado((s) => s.obreros.reduce((t, o) => t + o.deuda, 0));
   const cuadrillas = useEstado((s) => s.cuadrillas);
   const obreros = useEstado((s) => s.obreros);
+  const pagos = useEstado((s) => s.tablas.pagos);
 
-  // Se recalcula con otro corte, después de un pago o si cambian los adelantos.
-  // Lo que ajustaste a mano (descuentos, plus) se mantiene mientras no cambie el corte.
-  const claveDatos = `${hasta}|${version}|${deudaVersion}`;
-  const clave = `${hasta}|${version}`;
-  useEffect(() => {
-    let vivo = true;
-    previewPago(hasta)
-      .then((d) => vivo && setDatos(d))
-      .catch((e) => vivo && avisarError(e));
-    return () => {
-      vivo = false;
-    };
-  }, [hasta, claveDatos]);
-
-  const listo = datos?.hasta === hasta;
+  // Se recalcula solo (días, adelantos). Lo que ajustaste a mano (descuentos, plus)
+  // se mantiene mientras no cambie el corte ni se pague o anule un pago.
+  const datos = usePreviewPago(hasta);
   const semana = useMemo(() => semanaDePago(hasta), [hasta]);
-  const valores = ajustes.clave === clave ? ajustes.v : null;
+  const valores = ajustes.hasta === hasta && ajustes.pagos === pagos ? ajustes.v : null;
 
   const items = useMemo(
     () =>
-      (listo ? datos.items : []).map((it) => {
+      datos.items.map((it) => {
         const a = valores?.[it.obrero_id] ?? {};
         const incluir = a.incluir ?? true;
         const plus = a.plus ?? 0;
@@ -58,19 +42,19 @@ export default function ProximoPago() {
         const descuento = modo === 'todo' ? tope : modo === 'nada' ? 0 : Math.min(a.monto ?? 0, tope);
         return { ...it, incluir, plus, tope, modo, monto: a.monto ?? 0, descuento, neto: it.bruto + plus - descuento, nota: a.nota ?? '' };
       }),
-    [listo, datos, valores]
+    [datos, valores]
   );
 
   function ajustar(obreroId, cambios) {
     setAjustes((prev) => {
-      const v = prev.clave === clave ? prev.v : {};
-      return { clave, v: { ...v, [obreroId]: { ...v[obreroId], ...cambios } } };
+      const v = prev.hasta === hasta && prev.pagos === pagos ? prev.v : {};
+      return { hasta, pagos, v: { ...v, [obreroId]: { ...v[obreroId], ...cambios } } };
     });
   }
 
   const incluidos = items.filter((i) => i.incluir);
   const total = suma(incluidos, 'neto');
-  const deudaQueda = items.reduce((s, i) => s + i.deuda - (i.incluir ? i.descuento : 0), 0) + suma(datos?.sin_dias ?? [], 'deuda');
+  const deudaQueda = items.reduce((s, i) => s + i.deuda - (i.incluir ? i.descuento : 0), 0) + suma(datos.sin_dias, 'deuda');
   const conAnteriores = items.filter((i) => i.desde < semana.desde).length;
   const cuadrillaDe = (id) => cuadrillas.find((c) => c.id === obreros.find((o) => o.id === id)?.cuadrilla_id);
 
@@ -112,12 +96,10 @@ export default function ProximoPago() {
         </button>
       </div>
 
-      {!listo ? (
-        <Esqueleto filas={5} />
-      ) : !items.length ? (
+      {!items.length ? (
         <Vacio icono={PartyPopper} titulo="No hay nada pendiente de pago" texto={`Todos los días hasta el ${conDia(hasta)} ya están pagados.`} />
       ) : (
-        <>
+        <div key={hasta} className="animar-subir">
           <div className="tarjeta mt-3 overflow-hidden">
             <div className="p-4 pb-3">
               <p className="text-xs font-bold tracking-wide text-tinta-3 uppercase">Total a pagar</p>
@@ -179,7 +161,7 @@ export default function ProximoPago() {
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

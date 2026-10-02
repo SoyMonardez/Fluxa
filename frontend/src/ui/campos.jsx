@@ -1,6 +1,5 @@
 // Controles chicos reutilizables.
 import { useLayoutEffect, useRef } from 'react';
-import { animate, m, useReducedMotion } from 'motion/react';
 import { Minus, Plus, Search, X } from 'lucide-react';
 import { leerMonto, miles, pesos } from '../lib/formato';
 
@@ -30,38 +29,52 @@ export function MontoInput({ valor, onCambio, autoFocus = false, tam = 'grande',
   );
 }
 
+const quieto = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 /** Número que "cuenta" hasta el valor nuevo. */
 export function Numero({ valor, formato = pesos, className = '' }) {
   const ref = useRef(null);
   const previo = useRef(valor);
-  const quieto = useReducedMotion();
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
     const desde = previo.current;
     previo.current = valor;
-    if (quieto || desde === valor || !el.textContent) {
+    if (desde === valor || !el.textContent || quieto()) {
       el.textContent = formato(valor);
       return undefined;
     }
-    const ctrl = animate(desde, valor, {
-      duration: 0.55,
-      ease: [0.22, 1, 0.36, 1],
-      onUpdate: (v) => {
-        el.textContent = formato(v);
-      },
-    });
-    return () => ctrl.stop();
-  }, [valor, formato, quieto]);
+    const inicio = performance.now();
+    let cuadro;
+    const paso = (ahora) => {
+      const k = Math.min(1, (ahora - inicio) / 550);
+      const suave = 1 - (1 - k) ** 3;
+      el.textContent = formato(desde + (valor - desde) * suave);
+      if (k < 1) cuadro = requestAnimationFrame(paso);
+    };
+    cuadro = requestAnimationFrame(paso);
+    return () => {
+      cancelAnimationFrame(cuadro);
+      el.textContent = formato(valor);
+    };
+  }, [valor, formato]);
 
   return <span ref={ref} className={`num ${className}`} />;
 }
 
-/** Control segmentado con "píldora" que se desliza. */
-export function Segmentos({ id, opciones, valor, onCambio, className = '', fondo = 'bg-superficie-2', pildora = 'bg-superficie' }) {
+/** Control segmentado con una "píldora" que se desliza hasta la opción elegida. */
+export function Segmentos({ opciones, valor, onCambio, className = '', fondo = 'bg-superficie-2', pildora = 'bg-superficie', textoActivo = 'text-tinta' }) {
+  const i = opciones.findIndex((o) => o.valor === valor);
   return (
-    <div role="tablist" className={`flex rounded-[0.9rem] border border-borde p-1 ${fondo} ${className}`}>
+    <div role="tablist" className={`relative flex rounded-[0.9rem] border border-borde p-1 ${fondo} ${className}`}>
+      {i >= 0 && (
+        <span
+          aria-hidden="true"
+          className={`absolute inset-y-1 left-1 rounded-[0.65rem] shadow-sm transition-transform duration-[450ms] ease-[var(--resorte-pildora)] ${pildora}`}
+          style={{ width: `calc((100% - 0.5rem) / ${opciones.length})`, transform: `translateX(${i * 100}%)` }}
+        />
+      )}
       {opciones.map((o) => {
         const activo = valor === o.valor;
         return (
@@ -71,19 +84,10 @@ export function Segmentos({ id, opciones, valor, onCambio, className = '', fondo
             role="tab"
             aria-selected={activo}
             onClick={() => onCambio(o.valor)}
-            className="relative flex flex-1 items-center justify-center gap-1.5 px-2 py-1.5 text-sm font-semibold"
+            className={`relative flex flex-1 items-center justify-center gap-1.5 px-2 py-1.5 text-sm font-semibold transition-colors ${activo ? textoActivo : 'text-tinta-2'}`}
           >
-            {activo && (
-              <m.span
-                layoutId={`seg-${id}`}
-                className={`absolute inset-0 rounded-[0.65rem] shadow-sm ${pildora}`}
-                transition={{ type: 'spring', damping: 32, stiffness: 420 }}
-              />
-            )}
-            <span className={`relative flex items-center gap-1.5 ${activo ? 'text-tinta' : 'text-tinta-2'}`}>
-              {o.icono && <o.icono size={16} />}
-              {o.texto}
-            </span>
+            {o.icono && <o.icono size={16} />}
+            {o.texto}
           </button>
         );
       })}
@@ -101,17 +105,15 @@ export function Interruptor({ activo, onCambio, etiqueta }) {
       onClick={() => onCambio(!activo)}
       className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${activo ? 'bg-ok' : 'bg-borde'}`}
     >
-      <m.span
-        className="absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow"
-        animate={{ x: activo ? 20 : 0 }}
-        transition={{ type: 'spring', stiffness: 600, damping: 34 }}
+      <span
+        className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ease-[var(--resorte-pildora)] ${activo ? 'translate-x-5' : ''}`}
       />
     </button>
   );
 }
 
 export function Contador({ valor, min = 0, max = Infinity, onCambio }) {
-  const boton = 'grid h-10 w-10 place-items-center rounded-full border border-borde bg-superficie-2 active:scale-90 disabled:opacity-30';
+  const boton = 'grid h-10 w-10 place-items-center rounded-full border border-borde bg-superficie-2 transition-transform active:scale-90 disabled:opacity-30';
   return (
     <div className="flex items-center gap-1">
       <button type="button" aria-label="Uno menos" className={boton} disabled={valor <= min} onClick={() => onCambio(valor - 1)}>
@@ -125,11 +127,12 @@ export function Contador({ valor, min = 0, max = Infinity, onCambio }) {
   );
 }
 
-export function Buscador({ valor, onCambio, placeholder = 'Buscar…', autoFocus = false }) {
+export function Buscador({ valor, onCambio, placeholder = 'Buscar…', autoFocus = false, id }) {
   return (
     <div className="relative">
       <Search className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-tinta-3" size={18} />
       <input
+        id={id}
         type="search"
         enterKeyHint="search"
         value={valor}
@@ -148,6 +151,19 @@ export function Buscador({ valor, onCambio, placeholder = 'Buscar…', autoFocus
           <X size={16} />
         </button>
       )}
+    </div>
+  );
+}
+
+/** Buscador del encabezado que se despliega (ver useBusqueda). */
+export function BuscadorPlegable({ busqueda, placeholder }) {
+  return (
+    <div className="plegable" data-abierto={busqueda.buscando} inert={!busqueda.buscando}>
+      <div>
+        <div className="pt-2">
+          <Buscador id={busqueda.id} valor={busqueda.texto} onCambio={busqueda.setTexto} placeholder={placeholder} />
+        </div>
+      </div>
     </div>
   );
 }

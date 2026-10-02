@@ -1,8 +1,8 @@
 // Detalle de una cuadrilla: encargado, integrantes, herramientas e historial. Todo desde acá.
-import { useEffect, useState } from 'react';
 import { Construction, KeyRound, Pencil, Plus, TriangleAlert, Truck, UserPlus, Users, Wrench, X } from 'lucide-react';
-import { cerrarCuadrilla, movimientos } from '../../lib/acciones';
+import { cerrarCuadrilla } from '../../lib/acciones';
 import { avisar } from '../../lib/avisos';
+import { useMovimientos } from '../../lib/consultas';
 import { cuentaRapida, ordenar } from '../../lib/derivados';
 import { colorDe, pesos } from '../../lib/formato';
 import { abrir, cerrar } from '../../lib/hojas';
@@ -16,17 +16,7 @@ export default function HojaCuadrilla({ cuadrillaId }) {
   const obreros = useEstado((s) => s.obreros);
   const herramientas = useEstado((s) => s.herramientas);
   const stock = useEstado((s) => s.stock);
-  const [movs, setMovs] = useState(null);
-
-  useEffect(() => {
-    let vivo = true;
-    movimientos({ cuadrillaId, limite: 12 })
-      .then((r) => vivo && setMovs(r))
-      .catch(() => {});
-    return () => {
-      vivo = false;
-    };
-  }, [cuadrillaId, stock]);
+  const movs = useMovimientos({ cuadrillaId, limite: 12 });
 
   if (!c) return <Hoja titulo="Cuadrilla cerrada" />;
 
@@ -63,8 +53,8 @@ export default function HojaCuadrilla({ cuadrillaId }) {
       ),
       confirmar: 'Cerrar cuadrilla',
       peligro: true,
-      onConfirmar: async () => {
-        await cerrarCuadrilla(c.id);
+      onConfirmar: () => {
+        cerrarCuadrilla(c.id);
         avisar(`${c.nombre} cerrada`);
         return 2;
       },

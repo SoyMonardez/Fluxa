@@ -18,7 +18,6 @@ export default function HojaIntegrantes({ cuadrillaId }) {
   // Se guardan sólo los cambios, así un obrero nuevo creado desde acá no se pierde.
   const [cambios, setCambios] = useState({});
   const [texto, setTexto] = useState('');
-  const [enviando, setEnviando] = useState(false);
 
   const activos = useMemo(
     () =>
@@ -34,10 +33,9 @@ export default function HojaIntegrantes({ cuadrillaId }) {
   const elegidos = obreros.filter((o) => o.activo && elegido(o));
   const movidos = elegidos.filter((o) => o.cuadrilla_id && o.cuadrilla_id !== cuadrillaId).length;
 
-  async function guardar() {
-    setEnviando(true);
+  function guardar() {
     try {
-      await definirIntegrantes(
+      definirIntegrantes(
         cuadrillaId,
         elegidos.map((o) => o.id)
       );
@@ -45,7 +43,6 @@ export default function HojaIntegrantes({ cuadrillaId }) {
       cerrar();
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -55,7 +52,7 @@ export default function HojaIntegrantes({ cuadrillaId }) {
       titulo={`Integrantes de ${c.nombre}`}
       subtitulo={movidos ? `${movidos} vienen de otra cuadrilla` : 'Tocá para sumar o sacar'}
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={enviando} onClick={guardar}>
+        <button type="button" className="btn btn-primario w-full" onClick={guardar}>
           Guardar ({elegidos.length})
         </button>
       }
@@ -83,7 +80,7 @@ export default function HojaIntegrantes({ cuadrillaId }) {
                 <span
                   className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 transition-colors ${si ? 'border-ok bg-ok text-white' : 'border-borde'}`}
                 >
-                  {si && <Check size={16} strokeWidth={3} />}
+                  {si && <Check size={16} strokeWidth={3} className="animar-crecer" />}
                 </span>
                 <Avatar nombre={o.nombre} color={si ? c.color : otra?.color} tam={36} />
                 <span className="min-w-0 flex-1">

@@ -1,9 +1,9 @@
 // Ficha del obrero: cuánto lleva, cuánto debe, cuánto le queda; días, adelantos y pagos.
-import { useCallback, useEffect, useState } from 'react';
-import { AnimatePresence, m } from 'motion/react';
+import { useState } from 'react';
 import { HandCoins, Lock, MessageCircle, Pencil, Phone, Trash2, Wrench } from 'lucide-react';
-import { borrarAdelanto, cuentaDe } from '../../lib/acciones';
-import { avisar, avisarError } from '../../lib/avisos';
+import { borrarAdelanto } from '../../lib/acciones';
+import { avisar } from '../../lib/avisos';
+import { useCuenta } from '../../lib/consultas';
 import { cuentaRapida } from '../../lib/derivados';
 import { conDia, corta } from '../../lib/fechas';
 import { colorDe, jornales, mas, menos, pesos, whatsapp } from '../../lib/formato';
@@ -16,15 +16,8 @@ import Hoja, { BotonCerrar } from '../../ui/Hoja';
 export default function HojaFicha({ obreroId }) {
   const o = useEstado((s) => s.obreros.find((x) => x.id === obreroId));
   const cuadrilla = useEstado((s) => s.cuadrillas.find((c) => c.id === o?.cuadrilla_id));
-  const [cuenta, setCuenta] = useState(null);
+  const cuenta = useCuenta(obreroId);
   const [pestana, setPestana] = useState('dias');
-
-  const recargar = useCallback(() => {
-    cuentaDe(obreroId).then(setCuenta).catch(avisarError);
-  }, [obreroId]);
-
-  // Se recarga cuando cambia algo de su cuenta (marcas, adelantos, pagos).
-  useEffect(recargar, [recargar, o?.deuda, o?.pend_jornales, o?.pend_dias]);
 
   if (!o) return <Hoja titulo="Obrero" />;
 
@@ -102,7 +95,6 @@ export default function HojaFicha({ obreroId }) {
       </div>
 
       <Segmentos
-        id={`ficha-${o.id}`}
         className="mt-5"
         valor={pestana}
         onCambio={setPestana}
@@ -113,29 +105,22 @@ export default function HojaFicha({ obreroId }) {
         ]}
       />
 
-      <AnimatePresence mode="wait" initial={false}>
-        <m.div key={pestana} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }} className="mt-3">
-          {!cuenta ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="esqueleto h-12" />
-              ))}
-            </div>
-          ) : pestana === 'dias' ? (
-            <ListaDias asistencias={cuenta.asistencias} jornal={o.jornal} />
-          ) : pestana === 'adelantos' ? (
-            <ListaAdelantos adelantos={cuenta.adelantos} alCambiar={recargar} />
-          ) : (
-            <ListaPagos pagos={cuenta.pagos} />
-          )}
-        </m.div>
-      </AnimatePresence>
+      <div key={pestana} className="animar-subir mt-3">
+        {pestana === 'dias' ? (
+          <ListaDias asistencias={cuenta.asistencias} jornal={o.jornal} />
+        ) : pestana === 'adelantos' ? (
+          <ListaAdelantos adelantos={cuenta.adelantos} />
+        ) : (
+          <ListaPagos pagos={cuenta.pagos} />
+        )}
+      </div>
     </Hoja>
   );
 }
 
+// Lo pagado se ve en "Pagos" (con el jornal de ese momento); acá, lo que lleva sin cobrar.
 function ListaDias({ asistencias, jornal }) {
-  if (!asistencias.length) return <p className="py-6 text-center text-sm text-tinta-3">Sin días registrados en los últimos 3 meses.</p>;
+  if (!asistencias.length) return <p className="py-6 text-center text-sm text-tinta-3">Sin días registrados en los últimos meses.</p>;
   return (
     <ul className="divide-y divide-borde rounded-2xl border border-borde">
       {asistencias.map((a) => (
@@ -145,7 +130,7 @@ function ListaDias({ asistencias, jornal }) {
             {jornales(a.jornales)} {a.jornales > 1 ? 'jornales' : 'jornal'}
           </span>
           <span className="min-w-0 flex-1 truncate text-xs text-tinta-3">{a.nota}</span>
-          <span className="num text-sm font-semibold">{pesos(a.jornales * jornal)}</span>
+          {!a.pagado && <span className="num text-sm font-semibold">{pesos(a.jornales * jornal)}</span>}
           {a.pagado ? <Lock size={14} className="shrink-0 text-tinta-3" aria-label="Pagado" /> : <span className="w-3.5 shrink-0" />}
         </li>
       ))}
@@ -153,7 +138,7 @@ function ListaDias({ asistencias, jornal }) {
   );
 }
 
-function ListaAdelantos({ adelantos, alCambiar }) {
+function ListaAdelantos({ adelantos }) {
   if (!adelantos.length) return <p className="py-6 text-center text-sm text-tinta-3">No pidió adelantos.</p>;
 
   function borrar(a) {
@@ -162,10 +147,9 @@ function ListaAdelantos({ adelantos, alCambiar }) {
       texto: `¿Borrar el ${a.tipo === 'cargo' ? 'cargo' : 'adelanto'} de ${pesos(a.monto)} del ${conDia(a.fecha)}?`,
       confirmar: 'Borrar',
       peligro: true,
-      onConfirmar: async () => {
-        await borrarAdelanto(a.id);
+      onConfirmar: () => {
+        borrarAdelanto(a.id);
         avisar('Borrado');
-        alCambiar();
       },
     });
   }

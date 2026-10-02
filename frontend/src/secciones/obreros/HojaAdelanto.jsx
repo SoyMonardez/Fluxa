@@ -18,30 +18,31 @@ export default function HojaAdelanto({ obreroId }) {
   const [monto, setMonto] = useState(0);
   const [fecha, setFecha] = useState(hoy);
   const [nota, setNota] = useState('');
-  const [enviando, setEnviando] = useState(false);
 
   if (!o) return <Hoja titulo="Adelanto" />;
   const { lleva, deuda, queda } = cuentaRapida(o);
 
-  async function guardar() {
+  function guardar() {
     if (!monto) return;
-    setEnviando(true);
     try {
-      const a = await darAdelanto(o.id, monto, fecha, nota.trim());
+      const a = darAdelanto(o.id, monto, fecha, nota);
       vibrar(12);
       cerrar();
       avisar(`Adelanto de ${pesos(monto)} a ${primerNombre(o.nombre)}`, {
         accion: {
           texto: 'Deshacer',
-          fn: () =>
-            borrarAdelanto(a.id)
-              .then(() => avisar('Adelanto borrado'))
-              .catch(avisarError),
+          fn: () => {
+            try {
+              borrarAdelanto(a.id);
+              avisar('Adelanto borrado');
+            } catch (e) {
+              avisarError(e);
+            }
+          },
         },
       });
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -61,7 +62,7 @@ export default function HojaAdelanto({ obreroId }) {
         </>
       }
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={!monto || enviando} onClick={guardar}>
+        <button type="button" className="btn btn-primario w-full" disabled={!monto} onClick={guardar}>
           {monto ? `Anotar adelanto de ${pesos(monto)}` : 'Escribí el monto'}
         </button>
       }

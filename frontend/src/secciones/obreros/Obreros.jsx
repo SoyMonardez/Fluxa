@@ -1,22 +1,22 @@
 // P9: el personal con su jornal, rol y cuadrilla. Tocar → ficha con su cuenta.
 import { useMemo, useState } from 'react';
-import { AnimatePresence, m } from 'motion/react';
 import { Search, UserPlus, Users } from 'lucide-react';
 import { buscar, cuentaRapida } from '../../lib/derivados';
 import { ordenRol, pesos, pluralRol, ROLES } from '../../lib/formato';
 import { abrir } from '../../lib/hojas';
 import { useEstado } from '../../lib/store';
 import Avatar from '../../ui/Avatar';
-import { Buscador, Segmentos, Vacio } from '../../ui/campos';
+import { BuscadorPlegable, Segmentos, Vacio } from '../../ui/campos';
 import { BotonFlotante, BotonIcono, Contenido, Encabezado } from '../../ui/pagina';
+import { useBusqueda } from '../../ui/useBusqueda';
 
 export default function Obreros() {
   const obreros = useEstado((s) => s.obreros);
   const cuadrillas = useEstado((s) => s.cuadrillas);
   const [estado, setEstado] = useState('activos');
   const [rol, setRol] = useState(null);
-  const [buscando, setBuscando] = useState(false);
-  const [texto, setTexto] = useState('');
+  const busqueda = useBusqueda();
+  const texto = busqueda.texto;
 
   const activos = useMemo(() => obreros.filter((o) => o.activo), [obreros]);
   const deBaja = obreros.length - activos.length;
@@ -38,17 +38,9 @@ export default function Obreros() {
       <Encabezado
         titulo="Obreros"
         subtitulo={`${activos.length} activos · si vienen todos, el día sale ${pesos(costoDia)}`}
-        derecha={<BotonIcono icono={Search} etiqueta="Buscar" activo={buscando} onClick={() => (setBuscando((b) => !b), setTexto(''))} />}
+        derecha={<BotonIcono icono={Search} etiqueta="Buscar" activo={busqueda.buscando} onClick={busqueda.alternar} />}
       >
-        <AnimatePresence initial={false}>
-          {buscando && (
-            <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-              <div className="pt-2">
-                <Buscador valor={texto} onCambio={setTexto} placeholder="Nombre, rol o cuadrilla" autoFocus />
-              </div>
-            </m.div>
-          )}
-        </AnimatePresence>
+        <BuscadorPlegable busqueda={busqueda} placeholder="Nombre, rol o cuadrilla" />
         <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none]">
           {[null, ...ROLES].map((r) => {
             const activo = rol === r;
@@ -57,7 +49,7 @@ export default function Obreros() {
                 key={r ?? 'todos'}
                 type="button"
                 onClick={() => setRol(r)}
-                className={`chip h-8 shrink-0 border px-3 text-[13px] ${activo ? 'border-tinta bg-tinta text-superficie' : 'border-borde bg-superficie text-tinta-2'}`}
+                className={`chip h-8 shrink-0 border px-3 text-[13px] transition-colors ${activo ? 'border-tinta bg-tinta text-superficie' : 'border-borde bg-superficie text-tinta-2'}`}
               >
                 {r ? `${pluralRol(r)[0].toUpperCase()}${pluralRol(r).slice(1)}` : 'Todos'}
                 <span className="num opacity-60">{r ? porRol(r) : base.length}</span>
@@ -70,7 +62,6 @@ export default function Obreros() {
       <Contenido conBoton>
         {deBaja > 0 && (
           <Segmentos
-            id="obreros-estado"
             className="mt-3"
             valor={estado}
             onCambio={setEstado}

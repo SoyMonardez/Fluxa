@@ -1,5 +1,4 @@
 // Un obrero dentro del próximo pago. Cerrado: días y monto. Abierto: descuento y plus.
-import { AnimatePresence, m } from 'motion/react';
 import { Check, ChevronDown } from 'lucide-react';
 import { diasDesde, inicial } from '../../lib/fechas';
 import { jornales, menos, pesos } from '../../lib/formato';
@@ -21,9 +20,7 @@ export default function ItemPago({ it, semana, color, abierto, onAbrir, onAjuste
             <div className="flex items-baseline gap-2">
               <p className="flex min-w-0 flex-1 items-center gap-1 text-[15px] font-semibold">
                 <span className="truncate">{it.nombre}</span>
-                <m.span animate={{ rotate: abierto ? 180 : 0 }} className="shrink-0 text-tinta-3">
-                  <ChevronDown size={16} />
-                </m.span>
+                <ChevronDown size={16} className={`shrink-0 text-tinta-3 transition-transform duration-300 ${abierto ? 'rotate-180' : ''}`} />
               </p>
               <span className="num shrink-0 text-[17px] leading-tight font-extrabold">{pesos(it.neto)}</span>
             </div>
@@ -50,25 +47,17 @@ export default function ItemPago({ it, semana, color, abierto, onAbrir, onAjuste
           aria-checked={it.incluir}
           aria-label={`Incluir a ${it.nombre} en este pago`}
           onClick={() => onAjuste({ incluir: !it.incluir })}
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-[0.6rem] border-2 transition-colors ${it.incluir ? 'border-tinta bg-tinta text-superficie' : 'border-borde'}`}
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-[0.6rem] border-2 transition-[background-color,border-color,scale] active:scale-90 ${it.incluir ? 'border-tinta bg-tinta text-superficie' : 'border-borde'}`}
         >
-          {it.incluir && <Check size={18} strokeWidth={3} />}
+          {it.incluir && <Check size={18} strokeWidth={3} className="animar-crecer" />}
         </button>
       </div>
 
-      <AnimatePresence initial={false}>
-        {abierto && (
-          <m.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', damping: 32, stiffness: 320 }}
-            className="overflow-hidden"
-          >
-            <Detalle it={it} onAjuste={onAjuste} />
-          </m.div>
-        )}
-      </AnimatePresence>
+      <div className="plegable" data-abierto={abierto} inert={!abierto}>
+        <div>
+          <Detalle it={it} onAjuste={onAjuste} />
+        </div>
+      </div>
     </li>
   );
 }
@@ -93,10 +82,10 @@ function Detalle({ it, onAjuste }) {
         <div>
           <Renglon texto="Adelantos pendientes" valor={<span className="text-deuda">{pesos(it.deuda)}</span>} />
           <Segmentos
-            id={`desc-${it.obrero_id}`}
             className="mt-1.5"
             fondo="bg-superficie"
-            pildora="bg-tinta [&+span]:text-superficie"
+            pildora="bg-tinta"
+            textoActivo="text-superficie"
             valor={it.modo}
             onCambio={(modo) => onAjuste({ modo, ...(modo === 'parte' && !it.monto ? { monto: Math.round(it.tope / 2) } : {}) })}
             opciones={[

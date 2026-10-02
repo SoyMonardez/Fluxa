@@ -1,6 +1,5 @@
 // Días de la semana de pago (sábado → viernes). En la vista semanal hace de
 // encabezado de columnas de la grilla.
-import { m } from 'motion/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { corta, inicial, numeroDia } from '../../lib/fechas';
 import { COLUMNAS_SEMANA } from './grilla';
@@ -49,10 +48,19 @@ export default function TiraSemana({ vista, dias, fecha, hoy, semana, asistencia
     );
   }
 
+  const i = dias.indexOf(fecha);
   return (
     <div className="mt-2 flex items-center gap-0.5">
       {anterior}
-      <div className="grid flex-1 grid-cols-7 gap-1">
+      <div className="relative grid flex-1 grid-cols-7 gap-1">
+        {/* Píldora que se desliza hasta el día elegido. */}
+        {i >= 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 rounded-xl bg-tinta transition-transform duration-[450ms] ease-[var(--resorte-pildora)]"
+            style={{ width: 'calc((100% - 1.5rem) / 7)', transform: `translateX(calc(${i} * (100% + 0.25rem)))` }}
+          />
+        )}
         {dias.map((d) => {
           const futuro = d > hoy;
           const elegido = d === fecha;
@@ -66,14 +74,11 @@ export default function TiraSemana({ vista, dias, fecha, hoy, semana, asistencia
               aria-pressed={elegido}
               className={`relative flex flex-col items-center rounded-xl pt-1 pb-1 ${futuro ? 'opacity-30' : ''}`}
             >
-              {elegido && (
-                <m.span layoutId="dia-elegido" className="absolute inset-0 rounded-xl bg-tinta" transition={{ type: 'spring', damping: 30, stiffness: 420 }} />
-              )}
-              <span className={`relative text-[11px] font-semibold ${elegido ? 'text-superficie/70' : 'text-tinta-3'}`}>{inicial(d)}</span>
-              <span className={`num relative text-[17px] leading-tight font-bold ${elegido ? 'text-superficie' : d === hoy ? 'text-marca' : ''}`}>
+              <span className={`text-[11px] font-semibold transition-colors ${elegido ? 'text-superficie/70' : 'text-tinta-3'}`}>{inicial(d)}</span>
+              <span className={`num text-[17px] leading-tight font-bold transition-colors ${elegido ? 'text-superficie' : d === hoy ? 'text-marca' : ''}`}>
                 {numeroDia(d)}
               </span>
-              <span className={`num relative h-3.5 text-[10px] leading-3.5 font-bold ${elegido ? 'text-superficie/80' : 'text-ok'}`}>{n || ''}</span>
+              <span className={`num h-3.5 text-[10px] leading-3.5 font-bold transition-colors ${elegido ? 'text-superficie/80' : 'text-ok'}`}>{n || ''}</span>
             </button>
           );
         })}

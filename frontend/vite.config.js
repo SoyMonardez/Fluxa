@@ -3,19 +3,20 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// En desarrollo, /api se manda al backend (por defecto en el puerto 3001).
-const proxy = { '/api': process.env.VITE_API_PROXY || 'http://localhost:3001' };
+// En desarrollo, /api se manda al backend de Python (uvicorn, puerto 8000).
+const proxy = { '/api': process.env.VITE_API_PROXY || 'http://localhost:8000' };
 
 export default defineConfig({
-  build: { chunkSizeWarningLimit: 600 },
+  build: { target: 'es2022', chunkSizeWarningLimit: 400 },
   server: { host: '0.0.0.0', port: 5173, proxy },
   preview: { host: '0.0.0.0', proxy },
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // La versión nueva espera a que se toque "Actualizar" (ver src/lib/actualizar.js).
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['icono.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'ETEM · Obras',
@@ -33,10 +34,13 @@ export default defineConfig({
           { src: 'icono-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
+      // La app entera queda guardada en el teléfono: abre y funciona sin señal.
+      // Los datos no pasan por acá: viven en IndexedDB (ver src/motor).
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/],
-        globPatterns: ['**/*.{js,css,html,svg,png}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

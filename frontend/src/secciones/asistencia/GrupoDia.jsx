@@ -18,7 +18,7 @@ export default function GrupoDia({ grupo, fecha, registros }) {
   const marcados = obreros.filter((o) => registros[o.id]?.jornales > 0).length;
   const todos = libres.length > 0 && libres.every((o) => registros[o.id]?.jornales > 0);
 
-  async function alternarTodos() {
+  function alternarTodos() {
     const items = todos
       ? libres.map((o) => ({ obrero_id: o.id, jornales: 0 }))
       : libres.filter((o) => !(registros[o.id]?.jornales > 0)).map((o) => ({ obrero_id: o.id, jornales: 1 }));
@@ -26,7 +26,7 @@ export default function GrupoDia({ grupo, fecha, registros }) {
     vibrar(14);
     setCascada(true);
     setTimeout(() => setCascada(false), 900);
-    const previos = await marcarVarios(fecha, items);
+    const previos = marcarVarios(fecha, items);
     avisar(todos ? `Desmarcaste a ${nombre}` : `${items.length} presente${items.length > 1 ? 's' : ''} en ${nombre}`, {
       accion: { texto: 'Deshacer', fn: () => marcarVarios(fecha, previos) },
     });
@@ -44,7 +44,7 @@ export default function GrupoDia({ grupo, fecha, registros }) {
           <button
             type="button"
             onClick={alternarTodos}
-            className={`chip ml-auto h-8 shrink-0 px-3 text-[13px] active:scale-95 ${
+            className={`chip ml-auto h-8 shrink-0 px-3 text-[13px] transition-[background-color,color,scale] active:scale-95 ${
               todos ? 'border border-borde bg-superficie text-tinta-2' : 'bg-ok-suave text-ok'
             }`}
           >

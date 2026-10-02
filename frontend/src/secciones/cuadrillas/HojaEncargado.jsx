@@ -14,12 +14,12 @@ export default function HojaEncargado({ cuadrillaId }) {
   if (!c) return <Hoja titulo="Encargado" />;
   const miembros = ordenar(obreros.filter((o) => o.activo && o.cuadrilla_id === c.id));
 
-  async function elegir(o) {
+  function elegir(o) {
     vibrar(10);
-    cerrar();
     try {
-      await guardarCuadrilla({ nombre: c.nombre, obra: c.obra, color: c.color, encargado_id: o.id }, c.id);
+      guardarCuadrilla({ nombre: c.nombre, obra: c.obra, color: c.color, encargado_id: o.id }, c.id);
       avisar(`${o.nombre} es el encargado de ${c.nombre}`);
+      cerrar();
     } catch (e) {
       avisarError(e);
     }

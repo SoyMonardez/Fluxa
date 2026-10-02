@@ -1,29 +1,31 @@
-import { LazyMotion, MotionConfig } from 'motion/react';
 import { useEstado } from './lib/store';
+import { registrarHojas } from './lib/hojas';
+import { perezoso } from './lib/perezoso';
 import Login from './shell/Login';
 import Shell from './shell/Shell';
 import HojaMenu from './shell/HojaMenu';
 import Avisos from './ui/Avisos';
 import Hojas from './ui/Hojas';
-import { registrarHojas } from './lib/hojas';
 import HojaConfirmar from './ui/HojaConfirmar';
 import HojaJornada from './secciones/asistencia/HojaJornada';
 import HojaFicha from './secciones/obreros/HojaFicha';
 import HojaAdelanto from './secciones/obreros/HojaAdelanto';
 import HojaElegirObrero from './secciones/obreros/HojaElegirObrero';
-import HojaObreroForm from './secciones/obreros/HojaObreroForm';
-import HojaConfirmarPago from './secciones/pagos/HojaConfirmarPago';
-import HojaDetallePago from './secciones/pagos/HojaDetallePago';
-import HojaCuadrilla from './secciones/cuadrillas/HojaCuadrilla';
-import HojaCuadrillaForm from './secciones/cuadrillas/HojaCuadrillaForm';
-import HojaIntegrantes from './secciones/cuadrillas/HojaIntegrantes';
-import HojaEncargado from './secciones/cuadrillas/HojaEncargado';
-import HojaEntregar from './secciones/cuadrillas/HojaEntregar';
-import HojaHerramienta from './secciones/herramientas/HojaHerramienta';
-import HojaHerramientaForm from './secciones/herramientas/HojaHerramientaForm';
-import HojaMover from './secciones/herramientas/HojaMover';
-import HojaReclamo from './secciones/herramientas/HojaReclamo';
-import HojaSumar from './secciones/herramientas/HojaSumar';
+
+// Lo que se usa al pasar lista va en el paquete principal; el resto, aparte.
+const HojaObreroForm = perezoso(() => import('./secciones/obreros/HojaObreroForm'));
+const HojaConfirmarPago = perezoso(() => import('./secciones/pagos/HojaConfirmarPago'));
+const HojaDetallePago = perezoso(() => import('./secciones/pagos/HojaDetallePago'));
+const HojaCuadrilla = perezoso(() => import('./secciones/cuadrillas/HojaCuadrilla'));
+const HojaCuadrillaForm = perezoso(() => import('./secciones/cuadrillas/HojaCuadrillaForm'));
+const HojaIntegrantes = perezoso(() => import('./secciones/cuadrillas/HojaIntegrantes'));
+const HojaEncargado = perezoso(() => import('./secciones/cuadrillas/HojaEncargado'));
+const HojaEntregar = perezoso(() => import('./secciones/cuadrillas/HojaEntregar'));
+const HojaHerramienta = perezoso(() => import('./secciones/herramientas/HojaHerramienta'));
+const HojaHerramientaForm = perezoso(() => import('./secciones/herramientas/HojaHerramientaForm'));
+const HojaMover = perezoso(() => import('./secciones/herramientas/HojaMover'));
+const HojaReclamo = perezoso(() => import('./secciones/herramientas/HojaReclamo'));
+const HojaSumar = perezoso(() => import('./secciones/herramientas/HojaSumar'));
 
 registrarHojas({
   menu: HojaMenu,
@@ -47,17 +49,15 @@ registrarHojas({
   sumarUnidades: HojaSumar,
 });
 
-const animaciones = () => import('./lib/animaciones').then((m) => m.default);
-
 export default function App() {
   const sesion = useEstado((s) => s.sesion);
+  const vencida = useEstado((s) => s.sesionVencida);
   return (
-    <MotionConfig reducedMotion="user">
-      <LazyMotion features={animaciones} strict>
-        {sesion ? <Shell /> : <Login />}
-        <Hojas />
-        <Avisos />
-      </LazyMotion>
-    </MotionConfig>
+    <>
+      {sesion ? <Shell /> : <Login />}
+      {sesion && vencida && <Login vencida />}
+      <Hojas />
+      <Avisos />
+    </>
   );
 }

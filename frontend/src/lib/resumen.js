@@ -20,7 +20,7 @@ export function resumenPago({ hasta, fecha, items, total }) {
 
 export function reciboObrero({ hasta, fecha, item }) {
   const semana = semanaDePago(hasta);
-  const dias = (item.asistencias || []).map((a) => `${conDia(a.fecha)} ${jornales(a.jornales)}`).join(' · ');
+  const dias = (item.asistencias || []).map((a) => (a.jornales == null ? conDia(a.fecha) : `${conDia(a.fecha)} ${jornales(a.jornales)}`)).join(' · ');
   return [
     '*ETEM · Recibo de pago*',
     `${item.nombre} — ${item.rol ?? ''}`.trim(),

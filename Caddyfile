@@ -1,0 +1,6 @@
+# Caddy pone el HTTPS solo (certificado gratis de Let's Encrypt) y le pasa todo a la app.
+# HTTPS es necesario para que la app se pueda instalar en el celular y funcione sin señal.
+{$DOMINIO} {
+	encode zstd gzip
+	reverse_proxy app:8000
+}

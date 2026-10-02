@@ -11,7 +11,6 @@ export default function Pagos() {
     <>
       <Encabezado titulo="Pagos" subtitulo="Se paga el viernes la semana de sábado a viernes">
         <Segmentos
-          id="pagos"
           className="mt-2"
           valor={vista}
           onCambio={setVista}

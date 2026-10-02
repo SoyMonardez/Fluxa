@@ -1,6 +1,6 @@
 // Piezas de página: encabezado fijo, botón flotante, esqueleto de carga y logo.
 import { useEffect, useState } from 'react';
-import { m } from 'motion/react';
+import EstadoRed from './EstadoRed';
 
 export function Encabezado({ titulo, subtitulo, derecha, children }) {
   return (
@@ -11,6 +11,7 @@ export function Encabezado({ titulo, subtitulo, derecha, children }) {
             <h1 className="text-[1.55rem] leading-tight font-extrabold tracking-tight">{titulo}</h1>
             {subtitulo && <p className="truncate text-sm text-tinta-2">{subtitulo}</p>}
           </div>
+          <EstadoRed />
           {derecha}
         </div>
         {children}
@@ -26,7 +27,7 @@ export function BotonIcono({ icono: Icono, etiqueta, onClick, activo = false, cl
       aria-label={etiqueta}
       title={etiqueta}
       onClick={onClick}
-      className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors active:scale-90 ${
+      className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full transition-[color,background-color,scale] active:scale-90 ${
         activo ? 'bg-tinta text-superficie' : 'text-tinta-2 hover:bg-superficie-2'
       } ${className}`}
     >
@@ -62,19 +63,18 @@ function useOcultoAlBajar() {
 export function BotonFlotante({ icono: Icono, texto, onClick }) {
   const oculto = useOcultoAlBajar();
   return (
-    <m.button
+    <button
       type="button"
-      initial={{ scale: 0.6, opacity: 0 }}
-      animate={oculto ? { scale: 0.8, opacity: 0, y: 24 } : { scale: 1, opacity: 1, y: 0 }}
-      whileTap={{ scale: 0.92 }}
-      transition={{ type: 'spring', damping: 22, stiffness: 380 }}
-      style={{ pointerEvents: oculto ? 'none' : 'auto' }}
       onClick={onClick}
-      className="fixed right-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 flex h-14 items-center gap-2 rounded-2xl bg-marca pr-5 pl-4 text-[15px] font-bold text-white shadow-[0_10px_28px_-6px_rgb(234_88_12/0.55)] md:right-8 md:bottom-8"
+      aria-hidden={oculto || undefined}
+      tabIndex={oculto ? -1 : undefined}
+      className={`animar-crecer fixed right-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 flex h-14 items-center gap-2 rounded-2xl bg-marca pr-5 pl-4 text-[15px] font-bold text-white shadow-[0_10px_28px_-6px_rgb(234_88_12/0.55)] transition-[translate,scale,opacity] duration-300 ease-[var(--resorte-pildora)] active:scale-[0.92] md:right-8 md:bottom-8 ${
+        oculto ? 'pointer-events-none translate-y-6 scale-80 opacity-0' : ''
+      }`}
     >
       <Icono size={22} strokeWidth={2.4} />
       {texto}
-    </m.button>
+    </button>
   );
 }
 

@@ -66,3 +66,15 @@ export function relativa(fecha) {
 
 /** "sáb 26/9 → vie 2/10" */
 export const rango = ({ desde, hasta }) => `${conDia(desde)} → ${conDia(hasta)}`;
+
+/** "recién", "hace 5 min", "hace 2 h", "ayer", "hace 3 días" (ms = momento en milisegundos). */
+export function hace(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 45) return 'recién';
+  const m = Math.round(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'ayer' : `hace ${d} días`;
+}

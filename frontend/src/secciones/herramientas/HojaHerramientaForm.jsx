@@ -18,21 +18,17 @@ export default function HojaHerramientaForm({ herramientaId, cuadrillaId = null 
       : { nombre: '', tipo: 'herramienta', cantidad: 1, valor: 0, nota: '' }
   );
   const [destino, setDestino] = useState(cuadrillaId);
-  const [enviando, setEnviando] = useState(false);
 
-  async function guardar(e) {
+  function guardar(e) {
     e?.preventDefault();
     if (!d.nombre.trim()) return;
-    setEnviando(true);
     try {
-      const datos = { ...d, nombre: d.nombre.trim(), nota: d.nota.trim() };
-      const h = await guardarHerramienta(herramientaId ? datos : { ...datos, cuadrilla_id: destino }, herramientaId);
+      const h = guardarHerramienta(herramientaId ? d : { ...d, cuadrilla_id: destino }, herramientaId);
       const lugar = !herramientaId && destino ? ` y entregada a ${cuadrillas.find((c) => c.id === destino)?.nombre}` : '';
       avisar(herramientaId ? 'Cambios guardados' : `${h.nombre} cargada${lugar}`);
       cerrar();
     } catch (err) {
       avisarError(err);
-      setEnviando(false);
     }
   }
 
@@ -40,14 +36,13 @@ export default function HojaHerramientaForm({ herramientaId, cuadrillaId = null 
     <Hoja
       titulo={herramientaId ? 'Editar herramienta' : 'Nueva herramienta'}
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={!d.nombre.trim() || enviando} onClick={guardar}>
+        <button type="button" className="btn btn-primario w-full" disabled={!d.nombre.trim()} onClick={guardar}>
           {herramientaId ? 'Guardar cambios' : 'Guardar'}
         </button>
       }
     >
       <form onSubmit={guardar} className="space-y-4">
         <Segmentos
-          id="tipo-herramienta"
           valor={d.tipo}
           onCambio={(tipo) => setD({ ...d, tipo })}
           opciones={[
@@ -95,7 +90,7 @@ export default function HojaHerramientaForm({ herramientaId, cuadrillaId = null 
                   key={c.id ?? 'panol'}
                   type="button"
                   onClick={() => setDestino(c.id)}
-                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold ${destino === c.id ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${destino === c.id ? 'border-tinta bg-superficie-2' : 'border-borde text-tinta-2'}`}
                 >
                   {c.color && <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorDe(c.color) }} />}
                   {c.nombre}

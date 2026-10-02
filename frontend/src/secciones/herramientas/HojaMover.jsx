@@ -24,23 +24,20 @@ export default function HojaMover({ herramientaId, desde = null }) {
 
   const [cantidad, setCantidad] = useState(desde == null ? 1 : hay);
   const [hacia, setHacia] = useState(desde != null ? null : (destinos[0]?.id ?? null));
-  const [enviando, setEnviando] = useState(false);
 
   if (!h) return <Hoja titulo="Mover" />;
   const destino = destinos.find((d) => d.id === hacia);
   const encargadoDe = (c) => obreros.find((o) => o.id === c?.encargado_id)?.nombre;
   const n = Math.min(Math.max(1, cantidad), hay);
 
-  async function mover() {
-    setEnviando(true);
+  function mover() {
     try {
-      await moverHerramientas(desde, hacia, [{ herramienta_id: h.id, cantidad: n }]);
+      moverHerramientas(desde, hacia, [{ herramienta_id: h.id, cantidad: n }]);
       vibrar(12);
       avisar(hacia == null ? `${n} × ${h.nombre} volvieron al pañol` : `${n} × ${h.nombre} → ${destino.nombre}`);
       cerrar();
     } catch (e) {
       avisarError(e);
-      setEnviando(false);
     }
   }
 
@@ -51,7 +48,7 @@ export default function HojaMover({ herramientaId, desde = null }) {
       titulo={h.nombre}
       subtitulo={`${origen ? `En ${origen.nombre}` : 'En el pañol'}: ${hay} unidad${hay === 1 ? '' : 'es'}${origen && encargadoDe(origen) ? ` · responde ${encargadoDe(origen)}` : ''}`}
       pie={
-        <button type="button" className="btn btn-primario w-full" disabled={!hay || enviando || (desde == null && hacia == null)} onClick={mover}>
+        <button type="button" className="btn btn-primario w-full" disabled={!hay || (desde == null && hacia == null)} onClick={mover}>
           {accion}
         </button>
       }
@@ -74,7 +71,7 @@ export default function HojaMover({ herramientaId, desde = null }) {
                 <button
                   type="button"
                   onClick={() => setHacia(d.id)}
-                  className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left ${activo ? 'border-tinta bg-superficie-2' : 'border-borde'}`}
+                  className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-colors ${activo ? 'border-tinta bg-superficie-2' : 'border-borde'}`}
                 >
                   {d.id == null ? (
                     <Warehouse size={20} className="text-tinta-2" />
@@ -89,7 +86,7 @@ export default function HojaMover({ herramientaId, desde = null }) {
                       </span>
                     )}
                   </span>
-                  {activo && <ArrowRight size={18} />}
+                  {activo && <ArrowRight size={18} className="animar-desde-izquierda" />}
                 </button>
               </li>
             );
