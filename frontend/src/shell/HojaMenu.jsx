@@ -16,6 +16,8 @@ function Sincronizacion() {
   const ultima = useEstado((s) => s.ultimaSync);
   const enLinea = useEstado((s) => s.enLinea);
   const [girando, setGirando] = useState(false);
+  const errorLocal = useEstado((s) => s.errorLocal);
+  const temporal = useEstado((s) => s.almacenTemporal);
 
   let Icono = CloudCheck;
   let titulo = 'Todo sincronizado';
@@ -60,9 +62,9 @@ function Sincronizacion() {
         </button>
       </div>
       <p className="mt-2 text-[13px] leading-snug opacity-80">
-        {pendientes > 0
+        {errorLocal || (temporal ? 'Los cambios sólo duran mientras esta pestaña siga abierta. Sincronizá antes de cerrarla.' : pendientes > 0
           ? 'Están guardados en este teléfono y se suben solos cuando vuelve la señal.'
-          : 'Podés usar la app sin señal: todo queda guardado en el teléfono y se sube solo.'}
+          : 'Podés usar la app sin señal: todo queda guardado en el teléfono y se sube solo.')}
       </p>
     </div>
   );

@@ -2,6 +2,7 @@ import asyncio
 import os
 import time
 import uuid
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -66,6 +67,8 @@ class Celular:
 def http():
     if not TEST_DB:
         pytest.skip("Definí TEST_DATABASE_URL (una base vacía de PostgreSQL) para las pruebas de la API.")
+    if not urlsplit(TEST_DB).path.rstrip('/').endswith('_test'):
+        pytest.fail('TEST_DATABASE_URL debe apuntar a una base cuyo nombre termine en _test; las pruebas borran su esquema.')
     import asyncpg
 
     async def limpiar():

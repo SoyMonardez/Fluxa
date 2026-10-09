@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { CloudOff, Share2 } from 'lucide-react';
 import { pagar } from '../../lib/acciones';
 import { avisar, avisarError } from '../../lib/avisos';
+import { useDetallePago } from '../../lib/consultas';
 import { conDia, hoy, rango, semanaDePago } from '../../lib/fechas';
 import { jornales, mas, menos, pesos } from '../../lib/formato';
 import { cerrar } from '../../lib/hojas';
@@ -15,14 +16,16 @@ import Hoja from '../../ui/Hoja';
 export default function HojaConfirmarPago({ hasta, items, totales, deudaQueda }) {
   const [fecha, setFecha] = useState(hoy);
   const [nota, setNota] = useState('');
-  const [pago, setPago] = useState(null);
+  const [pagoId, setPagoId] = useState(null);
+  const pago = useDetallePago(pagoId);
+  const confirmado = useEstado((s) => s.pagosConfirmados.has(pagoId));
   const enLinea = useEstado((s) => s.enLinea);
 
   function confirmar() {
     try {
       const p = pagar({ hasta, fecha, nota, items });
       vibrar([18, 60, 18]);
-      setPago(p);
+      setPagoId(p.id);
     } catch (e) {
       avisarError(e);
     }
@@ -37,13 +40,23 @@ export default function HojaConfirmarPago({ hasta, items, totales, deudaQueda })
     }
   }
 
+  if (pagoId && (!pago || pago.anulado)) {
+    return (
+      <Hoja titulo="El pago no quedó confirmado" pie={<button type="button" className="btn btn-primario w-full" onClick={() => cerrar()}>Revisar pagos</button>}>
+        <p role="alert" className="rounded-2xl bg-mal-suave p-4 text-mal">
+          El pago fue rechazado al sincronizar o se anuló desde otro dispositivo. Revisá el historial y los días pendientes antes de entregar dinero.
+        </p>
+      </Hoja>
+    );
+  }
+
   if (pago) {
     return (
       <Hoja
-        titulo="Pago registrado"
+        titulo={confirmado ? 'Pago registrado' : 'Pago pendiente de sincronizar'}
         pie={
           <div className="flex gap-2">
-            <button type="button" className="btn btn-suave flex-1" onClick={compartirResumen}>
+            <button type="button" className="btn btn-suave flex-1" disabled={!confirmado} onClick={compartirResumen}>
               <Share2 size={18} /> Compartir
             </button>
             <button type="button" className="btn btn-primario flex-1" onClick={() => cerrar()}>
@@ -74,10 +87,11 @@ export default function HojaConfirmarPago({ hasta, items, totales, deudaQueda })
               {pago.items.length} obreros · pagado el {conDia(pago.fecha)}
             </p>
             <p className="mt-3 text-sm text-tinta-3">Los días quedaron pagados y bloqueados. Si hay que corregir algo, se puede anular desde el historial.</p>
-            {!enLinea && (
+            {!confirmado && (
               <p className="mt-3 flex items-start gap-2 rounded-2xl bg-deuda-suave p-3 text-left text-sm text-deuda">
                 <CloudOff size={18} className="mt-px shrink-0" />
-                Quedó guardado en el teléfono y se sube solo cuando haya señal.
+                {enLinea ? 'Esperando confirmación del servidor. ' : 'Se subirá cuando haya señal. '}
+                Compartí el recibo una vez que termine de sincronizar.
               </p>
             )}
           </div>

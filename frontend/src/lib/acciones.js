@@ -44,18 +44,29 @@ const vista = crearVista();
 motor.suscribir((e) =>
   setEstado({
     ...vista(e.tablas),
+    pagosConfirmados: e.pagosConfirmados,
     cargado: e.cargado,
     listo: e.listo,
     pendientes: e.pendientes,
     red: e.red,
     errorRed: e.error,
     ultimaSync: e.ultima,
+    errorLocal: e.errorLocal,
+    almacenTemporal: e.almacenTemporal,
+    sinGuardar: e.sinGuardar,
   })
 );
 
 if (getEstado().sesion) motor.arrancar();
 
 if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (e) => {
+    const estado = getEstado();
+    if (estado.sinGuardar || (estado.almacenTemporal && estado.pendientes)) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
   window.addEventListener('online', () => {
     setEstado({ enLinea: true });
     motor.sincronizar();

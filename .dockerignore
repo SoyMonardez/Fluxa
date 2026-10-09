@@ -9,5 +9,10 @@ frontend/test
 backend/tests
 backend/.env
 .env
+.env.local
+**/.venv
+backend/uploads
+*.zip
+respaldos
 docs
 *.log

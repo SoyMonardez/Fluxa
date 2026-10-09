@@ -1,0 +1,48 @@
+# Uso local, sin dominio y sin ocupar los puertos de los otros proyectos.
+# docker compose --env-file .env.local -f compose.local.yml up -d --build
+name: fluxa-local
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: etem
+      POSTGRES_USER: etem
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD}
+      TZ: America/Argentina/Buenos_Aires
+    ports:
+      - "127.0.0.1:5547:5432"
+    volumes:
+      - datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U etem -d etem"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  app:
+    build: .
+    image: fluxa-local-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://etem:${DB_PASSWORD}@db:5432/etem
+      SECRETO: ${SECRETO:?Falta SECRETO}
+      ADMIN_CLAVE: ${ADMIN_CLAVE:?Falta ADMIN_CLAVE}
+    ports:
+      - "127.0.0.1:8180:8000"
+  demo:
+    image: fluxa-local-app
+    profiles: [demo]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://etem:${DB_PASSWORD}@db:5432/etem_demo
+      SECRETO: ${SECRETO:?Falta SECRETO}
+      ADMIN_CLAVE: ${ADMIN_CLAVE:?Falta ADMIN_CLAVE}
+    ports:
+      - "127.0.0.1:8181:8000"
+volumes:
+  datos:

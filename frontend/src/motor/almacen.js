@@ -20,12 +20,12 @@ function abrir() {
     pedido.onsuccess = () => {
       const db = pedido.result;
       // Si otra pestaña actualiza la base, se cierra ésta para no trabarla.
-      db.onversionchange = () => db.close();
+      db.onversionchange = () => { db.close(); conexion = null; };
       ok(db);
     };
     pedido.onerror = () => mal(pedido.error);
     pedido.onblocked = () => mal(new Error('IndexedDB bloqueada por otra pestaña'));
-  });
+  }).catch((error) => { conexion = null; throw error; });
   return conexion;
 }
 
@@ -64,9 +64,17 @@ export const almacenIDB = {
   async guardarSync({ kv = {}, quitar = [] }) {
     const db = await abrir();
     const tx = db.transaction(['kv', 'ops'], 'readwrite');
-    for (const [k, v] of Object.entries(kv)) tx.objectStore('kv').put(v, k);
+    const fin = terminar(tx);
+    const tabla = tx.objectStore('kv');
+    const previa = tabla.get('meta');
+    previa.onsuccess = () => {
+      // Una respuesta tardía de otra pestaña nunca hace retroceder la foto.
+      if ((previa.result?.cursor ?? 0) <= (kv.meta?.cursor ?? 0)) {
+        for (const [k, v] of Object.entries(kv)) tabla.put(v, k);
+      }
+    };
     for (const n of quitar) tx.objectStore('ops').delete(n);
-    return terminar(tx);
+    return fin;
   },
 
   async borrarTodo() {
@@ -84,13 +92,13 @@ export function almacenMemoria() {
   let ops = new Map();
   return {
     async leerTodo() {
-      return { datos: { ...kv }, ops: [...ops.values()].sort((a, b) => (a.n < b.n ? -1 : a.n > b.n ? 1 : 0)) };
+      return { datos: { ...kv }, ops: [...ops.values()].sort((a, b) => (a.n < b.n ? -1 : a.n > b.n ? 1 : 0)), temporal: true };
     },
     async agregarOps(lista) {
       for (const op of lista) ops.set(op.n, op);
     },
     async guardarSync({ kv: nuevos = {}, quitar = [] }) {
-      kv = { ...kv, ...nuevos };
+      if ((kv.meta?.cursor ?? 0) <= (nuevos.meta?.cursor ?? 0)) kv = { ...kv, ...nuevos };
       for (const n of quitar) ops.delete(n);
     },
     async borrarTodo() {

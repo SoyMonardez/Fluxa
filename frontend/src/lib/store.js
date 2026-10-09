@@ -11,6 +11,7 @@ let estado = {
   listo: false, // hay datos para mostrar
   // Vista (motor/derivar.js)
   tablas: vacias(),
+  pagosConfirmados: new Map(),
   obreros: [],
   cuadrillas: [],
   herramientas: [],
@@ -20,6 +21,9 @@ let estado = {
   pendientes: 0, // cambios hechos en el teléfono que todavía no subieron
   red: 'ok', // 'ok' | 'subiendo' | 'sin-senal' | 'error' | 'sesion'
   errorRed: null,
+  errorLocal: null,
+  almacenTemporal: false,
+  sinGuardar: 0,
   ultimaSync: null,
   enLinea: typeof navigator === 'undefined' ? true : navigator.onLine,
 };

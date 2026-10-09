@@ -39,6 +39,16 @@ const item = (obreroId, fechas, jornales, jornal, descuento = 0, plus = 0) => ({
   nota: '',
 });
 
+test('un pago rechaza jornal desactualizado, días fuera del corte y diferencias de centavos', () => {
+  const { t, juan } = base();
+  const t2 = correr(t, ['asistencia.marcar', { obrero_id: juan, fecha: '2026-09-28', jornales: 1 }]);
+  const datos = { id: nuevoId(), hasta: '2026-10-02', fecha: '2026-10-02', items: [item(juan, ['2026-09-28'], 1, 50000)] };
+  assert.throws(() => aplicar(t2, op('pago.crear', { ...datos, items: [item(juan, ['2026-09-28'], 1, 40000)] })), /jornal cambió/);
+  assert.throws(() => aplicar(t2, op('pago.crear', { ...datos, hasta: '2026-09-25' })), /posteriores/);
+  assert.throws(() => aplicar(t2, op('pago.crear', { ...datos, items: [{ ...datos.items[0], neto: 50000.50 }] })), /no cierran/);
+  assert.doesNotThrow(() => aplicar(t2, op('pago.crear', datos)));
+});
+
 test('la semana de pago va de sábado a viernes', () => {
   assert.deepEqual(semanaDePago('2026-10-02'), { desde: '2026-09-26', hasta: '2026-10-02' }); // viernes
   assert.deepEqual(semanaDePago('2026-10-03'), { desde: '2026-10-03', hasta: '2026-10-09' }); // sábado

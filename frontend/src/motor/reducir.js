@@ -226,7 +226,9 @@ const OPERACIONES = {
     if (new Set(d.items.map((i) => i.obrero_id)).size !== d.items.length) throw new Rechazo('Un obrero aparece dos veces en el pago.');
     for (const it of d.items) {
       const o = obrero(e, it.obrero_id);
-      if (Math.abs(it.bruto - it.jornales * it.jornal) > 1 || Math.abs(it.neto - (it.bruto + it.plus - it.descuento)) > 1) {
+      if (r2(o.jornal) !== r2(it.jornal)) throw new Rechazo(`${o.nombre}: el jornal cambió. Revisá el pago y volvé a confirmarlo.`);
+      if (it.fechas.some((f) => f > d.hasta)) throw new Rechazo(`${o.nombre}: hay días posteriores al corte del pago.`);
+      if (r2(it.bruto) !== r2(it.jornales * it.jornal) || r2(it.neto) !== r2(it.bruto + it.plus - it.descuento)) {
         throw new Rechazo(`${o.nombre}: las cuentas del pago no cierran.`);
       }
       if (it.descuento > it.bruto + it.plus + 0.01) throw new Rechazo(`${o.nombre}: el descuento supera lo que cobra.`);

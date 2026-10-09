@@ -23,7 +23,10 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
   let ops = []; // cambios sin confirmar, en orden
   let visibles = base; // base + ops
   let meta = { cursor: 0, ultima: null };
-  let guardadas = {}; // tabla → Map guardado en el almacén (para no reescribir lo que no cambió)
+  const sinGuardar = new Map();
+  let guardando = Promise.resolve();
+  let errorLocal = null;
+  let almacenTemporal = false;
   let numero = 0; // operaciones creadas por esta pestaña
   let ultimoTs = 0;
   // Clave de cada operación en el almacén: ordena por momento y no choca con otra
@@ -46,17 +49,42 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
 
   const estado = () => ({
     tablas: visibles,
+    pagosConfirmados: base.pagos,
     pendientes: ops.length,
     cargado,
     listo: meta.ultima != null, // ya sincronizó alguna vez (una base vacía tiene cursor 0)
     red: estadoRed,
     error,
     ultima: meta.ultima,
+    errorLocal,
+    almacenTemporal,
+    sinGuardar: sinGuardar.size,
   });
 
   function publicar() {
     const e = estado();
     for (const f of subs) f(e);
+  }
+
+  function guardarPendientes() {
+    const gen = generacion;
+    guardando = guardando.catch(() => {}).then(async () => {
+      if (gen !== generacion || !sinGuardar.size) return;
+      const lista = [...sinGuardar.values()];
+      try {
+        await almacen.agregarOps(lista);
+        if (gen !== generacion) return;
+        for (const op of lista) sinGuardar.delete(op.id);
+        errorLocal = null;
+      } catch {
+        if (gen !== generacion) return;
+        errorLocal = 'No se pudo guardar en este dispositivo. No cierres la app; liberá espacio y volvé a sincronizar.';
+        throw Object.assign(new Error(errorLocal), { status: 507 });
+      } finally {
+        if (gen === generacion) publicar();
+      }
+    });
+    return guardando;
   }
 
   function pedirSync(ms = ESPERA_OP) {
@@ -74,17 +102,24 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
     arranque ??= (async () => {
       const gen = generacion;
       try {
-        const { datos, ops: guardadasOps } = await almacen.leerTodo();
+        const { datos, ops: guardadasOps, temporal = false } = await almacen.leerTodo();
         if (gen !== generacion) return;
         const t = vacias();
         for (const n of NOMBRES) if (datos[`t.${n}`] instanceof Map) t[n] = datos[`t.${n}`];
         base = t;
-        guardadas = { ...t };
+        almacenTemporal = temporal;
+        errorLocal = null;
         meta = { ...meta, ...(datos.meta ?? {}) };
         ops = guardadasOps;
         ultimoTs = ops.reduce((m, o) => Math.max(m, o.ts), 0);
       } catch (e) {
         console.error('No se pudo leer lo guardado en el teléfono', e);
+        errorLocal = 'No se pudieron abrir los datos guardados. Cerrá otras pestañas de la app y volvé a intentar.';
+        estadoRed = 'error';
+        error = errorLocal;
+        arranque = null;
+        publicar();
+        return;
       }
       visibles = aplicarTodas(base, ops);
       cargado = true;
@@ -100,6 +135,8 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
   /** Aplica varias operaciones juntas: si alguna no vale (Rechazo), no se aplica ninguna. */
   function ejecutarVarias(lista) {
     if (!cargado) throw new Rechazo('Un momento: se están cargando los datos.');
+    if (errorLocal) throw new Rechazo(errorLocal);
+    if (!lista.length) return [];
     // Cada operación es posterior a la anterior (los adelantos se descuentan en ese orden).
     const ts = Math.max(ahora(), ultimoTs + 1);
     const nuevas = lista.map(([tipo, datos], i) => ({ id: nuevoId(), tipo, datos, ts: ts + i }));
@@ -109,7 +146,8 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
     ultimoTs = nuevas.at(-1).ts;
     ops = [...ops, ...nuevas];
     visibles = t;
-    almacen.agregarOps(nuevas).catch((e) => console.error('No se pudo guardar el cambio en el teléfono', e));
+    for (const op of nuevas) sinGuardar.set(op.id, op);
+    guardarPendientes().catch(() => {}); // el error queda visible y la cola se conserva para reintentar
     publicar();
     pedirSync(ESPERA_OP);
     return nuevas;
@@ -120,6 +158,7 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
   /* ── Sincronización ────────────────────────────────────────────────── */
 
   function sincronizar() {
+    if (!cargado && errorLocal) return arrancar();
     if (detenido || !cargado) return Promise.resolve();
     if (enCurso) {
       otraVez = true;
@@ -155,9 +194,12 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
       error = null;
       publicar();
     } while ((otraVez || ops.length > 0) && ++vueltas < MAX_VUELTAS && !detenido);
+    if (ops.length && !detenido) pedirSync(0);
   }
 
   async function vuelta(gen) {
+    await guardarPendientes();
+    if (gen !== generacion) return;
     const lote = ops.slice(0, LOTE);
     const r = await red.sincronizar({ cursor: meta.cursor, ops: lote.map(({ id, tipo, ts, datos }) => ({ id, tipo, ts, datos })) });
     if (gen !== generacion) return;
@@ -168,21 +210,24 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
     const rechazos = resueltas.filter((op) => !resultados.get(op.id).ok).map((op) => ({ op, error: resultados.get(op.id).error || 'No se pudo guardar.' }));
     const ids = new Set(resueltas.map((op) => op.id));
 
-    base = r.completo ? desdeCambios(r.cambios ?? {}) : fusionar(base, r.cambios ?? {});
-    ops = ops.filter((op) => !ids.has(op.id));
-    meta = { ...meta, cursor: r.cursor ?? meta.cursor, ultima: ahora() };
-    visibles = aplicarTodas(base, ops);
-
-    const aGuardar = base;
-    const kv = { meta };
-    for (const n of NOMBRES) if (aGuardar[n] !== guardadas[n]) kv[`t.${n}`] = aGuardar[n];
+    const nuevaBase = r.completo ? desdeCambios(r.cambios ?? {}) : fusionar(base, r.cambios ?? {});
+    const nuevaMeta = { ...meta, cursor: r.cursor ?? meta.cursor, ultima: ahora() };
+    // La foto y su cursor se guardan juntos. Otra pestaña puede haber escrito
+    // cualquier tabla: no alcanza con comparar con nuestra copia en memoria.
+    const kv = { meta: nuevaMeta };
+    for (const n of NOMBRES) kv[`t.${n}`] = nuevaBase[n];
     try {
       await almacen.guardarSync({ kv, quitar: resueltas.map((op) => op.n) });
-      if (gen === generacion) guardadas = { ...aGuardar };
-    } catch (e) {
-      console.error('No se pudo guardar en el teléfono', e);
+    } catch {
+      errorLocal = 'No se pudo guardar la sincronización. No cierres la app; liberá espacio y volvé a intentar.';
+      throw Object.assign(new Error(errorLocal), { status: 507 });
     }
     if (gen !== generacion) return;
+    base = nuevaBase;
+    meta = nuevaMeta;
+    ops = ops.filter((op) => !ids.has(op.id));
+    visibles = aplicarTodas(base, ops);
+    errorLocal = null;
 
     if (huboCorte) subidasTrasCorte += resueltas.length - rechazos.length;
     if (rechazos.length) avisos.rechazos?.(rechazos);
@@ -241,7 +286,8 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
     ops = [];
     visibles = base;
     meta = { cursor: 0, ultima: null };
-    guardadas = {};
+    sinGuardar.clear();
+    errorLocal = null;
     numero = 0;
     fallos = 0;
     huboCorte = false;
@@ -252,6 +298,7 @@ export function crearMotor({ almacen, red, avisos = {}, programar = setTimeout, 
     cargado = true;
     publicar();
     try {
+      await guardando.catch(() => {});
       await almacen.borrarTodo();
     } catch (e) {
       console.error('No se pudo borrar lo guardado', e);

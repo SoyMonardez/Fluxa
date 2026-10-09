@@ -67,6 +67,36 @@ frontend/src/
 
 ## Ponerla en marcha con Docker (recomendado)
 
+### En esta PC (Windows)
+
+1. Abrí Docker Desktop.
+2. Hacé doble clic en **`INICIAR-FLUXA.cmd`**. La primera vez compila la app y genera
+   claves al azar en `.env.local`. Conservá ese archivo: no se sube a GitHub.
+3. Entrá a **http://localhost:8180** con usuario **admin** y la clave `ADMIN_CLAVE`
+   de `.env.local`. Podés cambiarla desde el menú de la app.
+
+La base real empieza vacía. Los datos persisten en el volumen `fluxa-local_datos`,
+incluso al apagar la PC. `DETENER-FLUXA.cmd` detiene el sistema y conserva los datos.
+La app usa el puerto 8180 y su PostgreSQL el 5547, ambos accesibles sólo desde esta PC.
+No usa Apache ni MySQL de XAMPP.
+
+**Respaldo:** `RESPALDAR-FLUXA.cmd` guarda una copia de la base en `respaldos/`.
+Copiá esos archivos también a otro disco. Se restauran con `pg_restore` en una base
+vacía; no borres el volumen de Docker para actualizar el sistema.
+
+**Demostración opcional, separada de los datos reales:**
+
+```powershell
+docker compose --env-file .env.local -f compose.local.yml exec -T db createdb -U etem etem_demo
+docker compose --env-file .env.local -f compose.local.yml --profile demo up -d demo
+docker compose --env-file .env.local -f compose.local.yml exec -T demo python -m scripts.ejemplo
+```
+
+La demo se abre en http://localhost:8181 con el mismo usuario y clave inicial. Si ya
+existe `etem_demo`, salteá el primer comando. No cargues datos reales en la demo.
+
+### En un servidor, para usar desde el celular
+
 Necesitás un servidor con Docker y un **dominio que apunte a él** (puede ser uno gratis,
 por ejemplo de DuckDNS). El HTTPS es obligatorio para que el celular deje instalar la app y
 usarla sin señal; **Caddy lo saca solo** (certificado de Let's Encrypt).
@@ -120,12 +150,25 @@ Con `npm run build`, el backend también sirve la app compilada en `http://local
 ## Pruebas
 
 ```bash
-# Backend: reglas y API contra un PostgreSQL de prueba (la base se borra y se recrea)
+# Backend: reglas y API contra PostgreSQL (el nombre debe terminar en _test; su esquema se borra)
 cd backend && TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/etem_test pytest
 
 # Frontend: reglas locales, cálculos y sincronización (sin señal, rechazos, reintentos…)
 cd frontend && npm test && npm run lint && npm run build
 ```
+
+En PowerShell, definí la variable de prueba antes de ejecutar `pytest`:
+
+```powershell
+$env:TEST_DATABASE_URL = 'postgresql://usuario:clave@localhost:5547/etem_test'
+cd backend
+.\.venv\Scripts\python.exe -m pytest
+```
+
+GitHub Actions ejecuta las pruebas, lint y build del frontend en Windows y Linux,
+y las pruebas de la API con PostgreSQL 17. Los casos incluyen reintentos, datos sin
+señal, respuestas fuera de orden entre pestañas, fallos de almacenamiento y pagos
+con un jornal desactualizado. El detalle de la revisión está en `docs/ENTREGA.md`.
 
 ---
 
@@ -136,4 +179,4 @@ base vacía. Los obreros se cargan rápido desde **Obreros → Nuevo → Guardar
 
 ## Licencia
 
-ISC.
+El repositorio no incluye un archivo de licencia de distribución.

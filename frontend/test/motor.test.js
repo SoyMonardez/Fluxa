@@ -259,6 +259,22 @@ test('si un cambio de un grupo no vale, no se aplica ninguno', async () => {
   assert.equal(m.estado().pendientes, 0);
 });
 
+test('un pago pendiente pasa a confirmado sólo cuando lo acepta el servidor', async () => {
+  const srv = servidorFalso();
+  const { juan } = obra(srv);
+  const { m, conexion } = await encendido(srv);
+  marcar(m, juan);
+  await m.sincronizar();
+  conexion.caida = true;
+  const pago = pagarTodo(m, juan, 50000).datos.id;
+  assert.equal(m.estado().pagosConfirmados.has(pago), false);
+  await m.sincronizar();
+  assert.equal(m.estado().pagosConfirmados.has(pago), false);
+  conexion.caida = false;
+  await m.sincronizar();
+  assert.equal(m.estado().pagosConfirmados.has(pago), true);
+});
+
 test('los ids provisorios de movimientos se reemplazan por los del servidor', async () => {
   const srv = servidorFalso();
   const { funes } = obra(srv);
@@ -291,4 +307,87 @@ test('cerrar sesión borra lo guardado y empieza de cero', async () => {
   assert.equal(m.estado().listo, true);
   assert.equal(m.tablas().obreros.size, 2);
   assert.equal(srv.tablas.asistencias.size, 0); // lo que no se subió se perdió (se avisa antes de salir)
+});
+
+test('si falla el guardado de la respuesta no descarta la cola ni adelanta el cursor', async () => {
+  const srv = servidorFalso();
+  const { juan } = obra(srv);
+  const almacen = almacenMemoria();
+  const guardar = almacen.guardarSync;
+  const { m } = await encendido(srv, { almacen });
+  marcar(m, juan);
+  await tick();
+  almacen.guardarSync = async () => { throw new Error('Disco lleno'); };
+  await m.sincronizar();
+  assert.equal(m.estado().pendientes, 1);
+  assert.equal(m.estado().red, 'error');
+  almacen.guardarSync = guardar;
+  await m.sincronizar();
+  assert.equal(m.estado().pendientes, 0);
+  assert.equal(srv.tablas.asistencias.size, 1);
+  const reinicio = await encendido(srv, { almacen });
+  assert.equal(reinicio.m.tablas().asistencias.get(`${juan}|${HOY}`).jornales, 1);
+});
+
+test('una pestaña con respuesta atrasada no borra tablas ya sincronizadas por otra', async () => {
+  const srv = servidorFalso();
+  const { juan } = obra(srv);
+  const almacen = almacenMemoria();
+  const a = await encendido(srv, { almacen });
+  const b = await encendido(srv, { almacen });
+  let soltar;
+  a.conexion.sincronizar = async (pedido) => {
+    const respuesta = await srv.sincronizar(pedido);
+    await new Promise((resolve) => { soltar = resolve; });
+    return respuesta;
+  };
+  a.m.ejecutar('obrero.guardar', { id: juan, nombre: 'Juan anterior', rol: 'Oficial', jornal: 50000 });
+  const enVuelo = a.m.sincronizar();
+  await tick();
+  b.m.ejecutar('obrero.guardar', { id: juan, nombre: 'Juan', rol: 'Oficial', jornal: 60000 });
+  await b.m.sincronizar();
+  soltar();
+  await enVuelo;
+  await b.m.sincronizar();
+  const guardado = await almacen.leerTodo();
+  assert.equal(guardado.datos['t.obreros'].get(juan).jornal, 60000);
+});
+
+test('si no se guarda una operación avisa, bloquea más cambios y reintenta sin perderla', async () => {
+  const srv = servidorFalso();
+  const { juan } = obra(srv);
+  const almacen = almacenMemoria();
+  const agregar = almacen.agregarOps;
+  const { m } = await encendido(srv, { almacen });
+  almacen.agregarOps = async () => { throw new Error('Sin espacio'); };
+  marcar(m, juan);
+  await tick();
+  assert.match(m.estado().errorLocal, /No se pudo guardar/);
+  assert.equal(m.estado().sinGuardar, 1);
+  assert.throws(() => marcar(m, juan), /No se pudo guardar/);
+  await m.sincronizar();
+  assert.equal(srv.tablas.asistencias.size, 0);
+  almacen.agregarOps = agregar;
+  await m.sincronizar();
+  assert.equal(m.estado().errorLocal, null);
+  assert.equal(m.estado().sinGuardar, 0);
+  assert.equal(m.estado().pendientes, 0);
+  assert.equal(srv.tablas.asistencias.size, 1);
+});
+
+test('un fallo al leer no pisa los datos guardados y permite reintentar', async () => {
+  const srv = servidorFalso();
+  obra(srv);
+  const almacen = almacenMemoria();
+  const leer = almacen.leerTodo;
+  almacen.leerTodo = async () => { throw new Error('No disponible'); };
+  const { m } = celular(srv, { almacen });
+  await m.arrancar();
+  assert.equal(m.estado().cargado, false);
+  assert.equal(srv.pedidos, 0);
+  almacen.leerTodo = leer;
+  await m.sincronizar();
+  await m.sincronizar();
+  assert.equal(m.estado().listo, true);
+  assert.equal(m.estado().errorLocal, null);
 });

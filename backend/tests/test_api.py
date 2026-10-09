@@ -197,6 +197,48 @@ def test_operaciones_invalidas_no_traban_la_cola(cel):
     assert r["resultados"][0]["id"] == "no-es-uuid"
 
 
+def test_pago_rechaza_jornal_desactualizado_corte_y_centavos(cel):
+    _, juan, _, _ = armar_equipo(cel)
+    cel.subir(op("asistencia.marcar", obrero_id=juan, fecha=str(DIAS[0]), jornales=1))
+    item = {"id": nuevo_id(), "obrero_id": juan, "fechas": [str(DIAS[0])], "jornales": 1,
+            "jornal": 45000, "bruto": 45000, "neto": 45000}
+    casos = [
+        ({**item, "jornal": 40000, "bruto": 40000, "neto": 40000}, str(DIAS[4]), "jornal cambió"),
+        (item, str(DIAS[0] - timedelta(days=1)), "posteriores"),
+        ({**item, "neto": 45000.50}, str(DIAS[4]), "no cierran"),
+    ]
+    for datos, hasta, mensaje in casos:
+        r = cel.subir(op("pago.crear", id=nuevo_id(), hasta=hasta, fecha=str(DIAS[4]), items=[datos]))
+        assert not r["resultados"][0]["ok"]
+        assert mensaje in r["resultados"][0]["error"]
+        assert not r["cambios"]["pagos"]
+        assert not r["cambios"]["asistencias"]
+    r = cel.subir(op("pago.crear", id=nuevo_id(), hasta=str(DIAS[4]), fecha=str(DIAS[4]), items=[item]))
+    assert r["resultados"][0]["ok"]
+
+
+def test_reintento_antiguo_no_duplica_entrega_tras_reiniciar(cel, http):
+    from app.db import preparar
+    cu, _, _, _ = armar_equipo(cel)
+    herramienta = nuevo_id()
+    cel.subir(op("herramienta.crear", id=herramienta, nombre="Pala", cantidad=4, fecha=str(DIAS[0])))
+    entrega = op("herramienta.mover", desde=None, hacia=cu, fecha=str(DIAS[0]),
+                 items=[{"herramienta_id": herramienta, "cantidad": 1}])
+    assert cel.subir(entrega)["resultados"][0]["ok"]
+
+    async def reiniciar():
+        from uuid import UUID
+        pool = http.app.state.pool
+        async with pool.acquire() as c:
+            await c.execute("UPDATE ops_aplicadas SET aplicada = now() - interval '121 days' WHERE id = $1", UUID(entrega["id"]))
+        await preparar(pool)
+
+    http.portal.call(reiniciar)
+    assert cel.subir(entrega)["resultados"][0]["ok"]
+    filas = cel.bajar(0)["cambios"]["stock"]
+    assert next(f for f in filas if f["herramienta_id"] == herramienta and f["cuadrilla_id"] == cu)["cantidad"] == 1
+
+
 def test_cambiar_clave_cierra_otras_sesiones(http):
     a, b = Celular(http), Celular(http)
     a.ingresar()

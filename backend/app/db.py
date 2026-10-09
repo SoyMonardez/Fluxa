@@ -30,7 +30,8 @@ async def preparar(pool: asyncpg.Pool) -> None:
         await c.execute("SELECT pg_advisory_lock($1)", CANDADO_ESQUEMA)
         try:
             await c.execute(ESQUEMA)
-            await c.execute("DELETE FROM ops_aplicadas WHERE aplicada < now() - interval '120 days'")
+            # Conservar los ids: un teléfono puede volver con operaciones antiguas.
+            # Borrarlos permitiría repetir entregas/reclamos ya aplicados.
             hay_usuarios = await c.fetchval("SELECT EXISTS (SELECT 1 FROM usuarios)")
             if not hay_usuarios:
                 if config.ADMIN_CLAVE:

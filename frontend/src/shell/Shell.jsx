@@ -35,6 +35,8 @@ function navegar(id) {
 export default function Shell() {
   const seccion = useSeccion();
   const listo = useEstado((s) => s.listo);
+  const errorLocal = useEstado((s) => s.errorLocal);
+  const almacenTemporal = useEstado((s) => s.almacenTemporal);
   const { Pagina } = SECCIONES.find((s) => s.id === seccion) ?? SECCIONES[0];
   const anterior = useRef(seccion);
 
@@ -62,6 +64,11 @@ export default function Shell() {
     <div className="min-h-dvh md:pl-64">
       <BarraLateral seccion={seccion} />
       <main className="pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-12">
+        {(errorLocal || almacenTemporal) && (
+          <p role="alert" className="mx-auto max-w-3xl bg-mal-suave p-4 font-semibold text-mal">
+            {errorLocal || 'Este navegador no permite guardar datos. No cierres la app con cambios sin subir. Para trabajar sin señal, usá una ventana normal con almacenamiento habilitado.'}
+          </p>
+        )}
         <div key={seccion} className="animar-pagina">
           <Suspense fallback={<Cargando />}>{listo ? <Pagina /> : <Cargando />}</Suspense>
         </div>

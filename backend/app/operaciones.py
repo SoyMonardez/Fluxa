@@ -312,7 +312,12 @@ async def pago_crear(c, d: m.PagoCrear, ctx: Contexto):
     for it in d.items:
         nombre = await nombre_obrero(c, it.obrero_id)
         fechas = sorted(set(it.fechas))
-        if abs(it.bruto - it.jornales * it.jornal) > 1 or abs(it.neto - (it.bruto + it.plus - it.descuento)) > 1:
+        vigente = await c.fetchval("SELECT jornal FROM obreros WHERE id = $1", it.obrero_id)
+        if vigente is None or r2(vigente) != r2(it.jornal):
+            raise Rechazo(f"{nombre}: el jornal cambió. Revisá el pago y volvé a confirmarlo.")
+        if any(f > d.hasta for f in fechas):
+            raise Rechazo(f"{nombre}: hay días posteriores al corte del pago.")
+        if r2(it.bruto) != r2(it.jornales * it.jornal) or r2(it.neto) != r2(it.bruto + it.plus - it.descuento):
             raise Rechazo(f"{nombre}: las cuentas del pago no cierran.")
         if it.descuento > it.bruto + it.plus + 0.01:
             raise Rechazo(f"{nombre}: el descuento supera lo que cobra.")
