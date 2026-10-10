@@ -1,0 +1,50 @@
+# VPS con Nginx Proxy Manager existente. No publica puertos de la base ni de la API.
+name: gestion-fluxa
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: gestion-fluxa-db
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      POSTGRES_DB: etem
+      POSTGRES_USER: etem
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD}
+      TZ: America/Argentina/Buenos_Aires
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+    volumes:
+      - datos:/var/lib/postgresql/data
+    networks: [datos]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U etem -d etem"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  app:
+    image: gestion-fluxa:${FLUXA_VERSION:?Falta FLUXA_VERSION}
+    container_name: gestion-fluxa-app
+    restart: unless-stopped
+    mem_limit: 256m
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql://etem:${DB_PASSWORD}@gestion-fluxa-db:5432/etem
+      SECRETO: ${SECRETO:?Falta SECRETO}
+      ADMIN_CLAVE: ${ADMIN_CLAVE:?Falta ADMIN_CLAVE}
+    networks: [datos, proxy]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  datos:
+networks:
+  datos:
+    internal: true
+  proxy:
+    external: true
+    name: nginx_network
